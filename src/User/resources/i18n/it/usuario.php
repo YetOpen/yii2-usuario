@@ -319,4 +319,6 @@ return [
     'You cannot block your own account.' => 'Non puoi bloccare il tuo stesso account.',
     'You cannot remove your own account.' => 'Non puoi eliminare il tuo stesso account.',
     'You received this email because someone, possibly you or someone on your behalf, have created an account at {app_name}' => 'Hai ricevuto questa email perché qualcuno, presumibilmente tu, ha creato un account su {app_name}',
+    'Profile Image' => 'Immagine Profilo',
+    'Image' => 'Immagine',
 ];
