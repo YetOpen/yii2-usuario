@@ -15,6 +15,7 @@ use Da\User\Event\FormEvent;
 use Da\User\Form\LoginForm;
 use Da\User\Model\User;
 use Da\User\Traits\ContainerAwareTrait;
+use sizeg\jwt\Jwt;
 use sizeg\jwt\JwtHttpBearerAuth;
 use Yii;
 use yii\base\InvalidConfigException;
@@ -30,6 +31,16 @@ use yii\rest\Controller;
 class SecurityController extends Controller
 {
     use ContainerAwareTrait;
+
+    /**
+     * @var int Validity of the issued JWT, in seconds.
+     */
+    public $tokenDuration = 86400;
+
+    /**
+     * @var string Signing algorithm for the issued JWT, one of Jwt::$supportedAlgs.
+     */
+    public $tokenSignerAlg = 'HS256';
 
     /**
      * {@inheritdoc}
@@ -73,13 +84,14 @@ class SecurityController extends Controller
         $verbs = parent::verbs();
 
         // Add new verbs and return
-        $verbs['login'] = ['POST'];
+        $verbs['login'] = ['POST', 'OPTIONS'];
         return $verbs;
     }
 
     /**
      * Controller action responsible for handling login.
-     * @return array|User
+     * On success returns the issued JWT as `{"token": "..."}`.
+     * @return array
      * @throws InvalidParamException
      * @throws InvalidConfigException
      */
@@ -112,10 +124,36 @@ class SecurityController extends Controller
                 ]);
 
                 $this->trigger(FormEvent::EVENT_AFTER_LOGIN, $event);
+
+                return ['token' => $this->generateToken($form->getUser())];
             }
             $this->trigger(FormEvent::EVENT_FAILED_LOGIN, $event);
         }
 
-        return $form->getUser();
+        Yii::$app->response->setStatusCode(401);
+
+        return [
+            'success' => false,
+            'errors' => $form->getFirstErrors(),
+        ];
+    }
+
+    /**
+     * Issues a JWT for the authenticated user. The `uid` claim carries the user id,
+     * matching what `findIdentityByAccessToken()` implementations expect.
+     */
+    protected function generateToken(User $user): string
+    {
+        /** @var Jwt $jwt */
+        $jwt = Yii::$app->jwt;
+        $now = time();
+
+        $token = $jwt->getBuilder()
+            ->issuedAt($now)
+            ->expiresAt($now + $this->tokenDuration)
+            ->withClaim('uid', $user->id)
+            ->getToken($jwt->getSigner($this->tokenSignerAlg), $jwt->getKey());
+
+        return (string) $token;
     }
 }
