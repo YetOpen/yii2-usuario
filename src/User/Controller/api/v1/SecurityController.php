@@ -18,6 +18,7 @@ use Da\User\Traits\ModuleAwareTrait;
 use Yii;
 use yii\filters\auth\CompositeAuth;
 use yii\rest\Controller;
+use yii\web\Cookie;
 use yii\web\UnauthorizedHttpException;
 
 class SecurityController extends Controller
@@ -73,8 +74,26 @@ class SecurityController extends Controller
 
             $this->trigger(FormEvent::EVENT_AFTER_LOGIN, $event);
 
+            $token = $form->getUser()->getAccessToken();
+
+            // Besides returning the token in the body, expose it as an httpOnly cookie so
+            // browser clients can authenticate without handling the token in JS. Controlled by
+            // Module::$apiTokenCookieName (set to null/empty to disable).
+            $cookieName = $this->module->apiTokenCookieName;
+            if (!empty($cookieName)) {
+                $duration = (int) $this->module->apiTokenCookieDuration;
+                Yii::$app->response->cookies->add(new Cookie([
+                    'name' => $cookieName,
+                    'value' => $token,
+                    'httpOnly' => true,
+                    'secure' => Yii::$app->request->isSecureConnection,
+                    'sameSite' => Cookie::SAME_SITE_STRICT,
+                    'expire' => $duration > 0 ? time() + $duration : 0,
+                ]));
+            }
+
             return [
-                'token' => $form->getUser()->getAccessToken(),
+                'token' => $token,
             ];
         }
         $this->trigger(FormEvent::EVENT_FAILED_LOGIN, $event);

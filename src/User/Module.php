@@ -313,6 +313,21 @@ class Module extends BaseModule
     public $maxProfileImageSize = 16 * 1024 * 1024;
 
     /**
+     * @var string|null Name of the cookie the REST login action
+     * ({@see \Da\User\Controller\api\v1\SecurityController::actionLogin}) sets with the issued
+     * access token, in addition to returning it in the response body. Set to `null` (or an empty
+     * string) to disable the cookie and only return the token in the body.
+     */
+    public $apiTokenCookieName = 'userToken';
+
+    /**
+     * @var int Lifetime, in seconds, of the {@see $apiTokenCookieName} cookie. Should match the
+     * access token's own expiry so the cookie does not outlive/underlive the token. `0` emits a
+     * session cookie. Defaults to 24h.
+     */
+    public $apiTokenCookieDuration = 86400;
+
+    /**
      * @return string with the hit to be used with the give consent checkbox
      */
     public function getConsentMessage()
