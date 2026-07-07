@@ -77,20 +77,8 @@ class SecurityController extends Controller
             $token = $form->getUser()->getAccessToken();
 
             // Besides returning the token in the body, expose it as an httpOnly cookie so
-            // browser clients can authenticate without handling the token in JS. Controlled by
-            // Module::$apiTokenCookieName (set to null/empty to disable).
-            $cookieName = $this->module->apiTokenCookieName;
-            if (!empty($cookieName)) {
-                $duration = (int) $this->module->apiTokenCookieDuration;
-                Yii::$app->response->cookies->add(new Cookie([
-                    'name' => $cookieName,
-                    'value' => $token,
-                    'httpOnly' => true,
-                    'secure' => Yii::$app->request->isSecureConnection,
-                    'sameSite' => Cookie::SAME_SITE_STRICT,
-                    'expire' => $duration > 0 ? time() + $duration : 0,
-                ]));
-            }
+            // clients can persist it without handling the token in JS.
+            $this->sendAccessTokenCookie($token);
 
             return [
                 'token' => $token,
@@ -99,5 +87,55 @@ class SecurityController extends Controller
         $this->trigger(FormEvent::EVENT_FAILED_LOGIN, $event);
 
         throw new UnauthorizedHttpException("Login failed. You are unauthorized to perform actions");
+    }
+
+    /**
+     * Sets the access token as an httpOnly cookie on the response, honouring the module options
+     * ({@see Module::$apiTokenCookieName}, `apiTokenCookieDuration`, `apiTokenCookieSameSite`,
+     * `apiTokenCookieRaw`). No-op when the cookie name is empty.
+     *
+     * @param string $token the access token to store
+     */
+    protected function sendAccessTokenCookie($token)
+    {
+        $name = $this->module->apiTokenCookieName;
+        if (empty($name)) {
+            return;
+        }
+
+        $duration = (int) $this->module->apiTokenCookieDuration;
+        $expire = $duration > 0 ? time() + $duration : 0;
+        $sameSite = $this->module->apiTokenCookieSameSite;
+        $secure = Yii::$app->request->isSecureConnection;
+
+        if ($this->module->apiTokenCookieRaw) {
+            // Build the Set-Cookie header manually: the response cookie collection would sign the
+            // value (serialized + HMAC) when cookieValidationKey is set, whereas an SSR/BFF layer
+            // needs the bare token to forward it as a Bearer credential.
+            $parts = [rawurlencode($name) . '=' . $token, 'Path=/'];
+            if ($expire > 0) {
+                $parts[] = 'Expires=' . gmdate('D, d-M-Y H:i:s', $expire) . ' GMT';
+                $parts[] = 'Max-Age=' . $duration;
+            }
+            $parts[] = 'HttpOnly';
+            if (!empty($sameSite)) {
+                $parts[] = 'SameSite=' . $sameSite;
+            }
+            if ($secure) {
+                $parts[] = 'Secure';
+            }
+            Yii::$app->response->headers->add('Set-Cookie', implode('; ', $parts));
+
+            return;
+        }
+
+        Yii::$app->response->cookies->add(new Cookie([
+            'name' => $name,
+            'value' => $token,
+            'httpOnly' => true,
+            'secure' => $secure,
+            'sameSite' => !empty($sameSite) ? $sameSite : Cookie::SAME_SITE_STRICT,
+            'expire' => $expire,
+        ]));
     }
 }

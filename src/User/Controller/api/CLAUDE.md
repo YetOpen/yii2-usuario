@@ -21,8 +21,14 @@ Active REST API controllers live here (the `rest/` sibling folder is deprecated)
 - Token value comes from `User::getAccessToken()` (base impl throws `NotSupportedException`;
   apps override — e.g. to return a JWT). The action stays token-format agnostic.
 - On success the token is returned in the body (`{ "token": ... }`) **and** set as an httpOnly
-  cookie so browser clients can authenticate without touching the token in JS. The cookie is
-  configurable on the `Module`: `apiTokenCookieName` (default `userToken`; set null/empty to
-  disable) and `apiTokenCookieDuration` (seconds; `0` = session cookie). It is `SameSite=Strict`
-  and `Secure` only over HTTPS (`request->isSecureConnection`). Keep the duration aligned with the
-  token's own expiry.
+  cookie (see `sendAccessTokenCookie()`) so clients can persist it without touching the token in
+  JS. Configurable on the `Module`:
+  - `apiTokenCookieName` (default `userToken`; null/empty disables the cookie),
+  - `apiTokenCookieDuration` (seconds; `0` = session cookie — keep aligned with the token expiry),
+  - `apiTokenCookieSameSite` (`Strict`/`Lax`/`None`; `None` needs HTTPS),
+  - `apiTokenCookieRaw` (default `false`). When `false` the cookie goes through the response cookie
+    collection and, if `cookieValidationKey` is set, its value is Yii's signed/serialized envelope
+    (readable only by this app — fine for cookie-based auth on this backend). When `true` the
+    cookie carries the **bare token** via a hand-built `Set-Cookie` header, so an SSR/BFF layer can
+    read it and forward it as a `Bearer` credential.
+  - `Secure` is added automatically over HTTPS (`request->isSecureConnection`).

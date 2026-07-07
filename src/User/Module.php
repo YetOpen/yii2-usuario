@@ -328,6 +328,22 @@ class Module extends BaseModule
     public $apiTokenCookieDuration = 86400;
 
     /**
+     * @var string `SameSite` policy of the {@see $apiTokenCookieName} cookie: `Strict`, `Lax` or
+     * `None` (`None` additionally requires HTTPS/`Secure`). Use `Lax` when an SSR frontend must
+     * receive the cookie on top-level navigations.
+     */
+    public $apiTokenCookieSameSite = 'Strict';
+
+    /**
+     * @var bool When `true`, emit the {@see $apiTokenCookieName} cookie with its **raw** value (the
+     * bare access token) via a manually built `Set-Cookie` header, so an external consumer (e.g. an
+     * SSR/BFF layer) can read it and forward it as a `Bearer` token. When `false` (default) the
+     * cookie is added through the response cookie collection, which — if `cookieValidationKey` is
+     * set — wraps the value in Yii's signed/serialized envelope (readable only by this app).
+     */
+    public $apiTokenCookieRaw = false;
+
+    /**
      * @return string with the hit to be used with the give consent checkbox
      */
     public function getConsentMessage()
