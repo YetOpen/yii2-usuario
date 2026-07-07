@@ -26,6 +26,9 @@ use yii\rest\Controller;
  * Controller that provides REST APIs to login via:
  * - JWT (JSON Web Token)
  * - login and password
+ *
+ * @deprecated The REST controllers under `Da\User\Controller\rest` are deprecated.
+ *             Use the API controllers under `Da\User\Controller\api` instead.
  */
 class SecurityController extends Controller
 {

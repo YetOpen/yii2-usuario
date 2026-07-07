@@ -46,21 +46,31 @@ class AuthController extends RestController
     }
 
     /**
-     * Returns all the roles.
+     * Returns the roles. Admins get the whole RBAC role set; any other user only
+     * gets the roles assigned to them (with their children).
      * @return array
      */
     public function actionRoles(): array
     {
-        return Yii::$app->authManager->getRoles();
+        if (Yii::$app->user->identity->isAdmin) {
+            return Yii::$app->authManager->getRoles();
+        }
+
+        return $this->getRolesByCurrentUser();
     }
 
     /**
-     * Returns all the permissions.
+     * Returns the permissions. Admins get the whole RBAC permission set; any other
+     * user only gets the permissions assigned to them.
      * @return array
      */
     public function actionPermissions(): array
     {
-        return Yii::$app->authManager->getPermissions();
+        if (Yii::$app->user->identity->isAdmin) {
+            return Yii::$app->authManager->getPermissions();
+        }
+
+        return Yii::$app->authManager->getPermissionsByUser(Yii::$app->user->id);
     }
 
     /**
@@ -68,6 +78,25 @@ class AuthController extends RestController
      * @return array
      */
     public function actionRolesByUser(): array
+    {
+        return $this->getRolesByCurrentUser();
+    }
+
+    /**
+     * Returns all the permissions for the current user.
+     * @return array
+     */
+    public function actionPermissionsByUser(): array
+    {
+        return Yii::$app->authManager->getPermissionsByUser(Yii::$app->user->id);
+    }
+
+    /**
+     * Returns the roles assigned to the currently authenticated user, including
+     * their children.
+     * @return array
+     */
+    private function getRolesByCurrentUser(): array
     {
         $authManager = Yii::$app->authManager;
         $userId = Yii::$app->user->id;
@@ -82,17 +111,6 @@ class AuthController extends RestController
         }
 
         return $allRoles;
-    }
-
-    /**
-     * Returns all the permissions for the current user.
-     * @return array
-     */
-    public function actionPermissionsByUser(): array
-    {
-        $authManager = Yii::$app->authManager;
-        $userId = Yii::$app->user->id;
-        return $authManager->getPermissionsByUser($userId);
     }
 
     /**
