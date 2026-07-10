@@ -11,14 +11,16 @@
 
 /**
  * @var \Da\User\Model\Token $token
+ * @var string|null          $resetUrl Frontend reset link; falls back to the backend web route.
  */
+$link = !empty($resetUrl) ? $resetUrl : $token->url;
 ?>
 <?= Yii::t('usuario', 'Hello') ?>,
 
 <?= Yii::t('usuario', 'We have received a request to reset the password for your account on {0}', Yii::$app->name) ?>.
 <?= Yii::t('usuario', 'Please click the link below to complete your password reset') ?>.
 
-<?= $token->url ?>
+<?= $link ?>
 
 <?= Yii::t('usuario', 'If you cannot click the link, please try pasting the text into your browser') ?>.
 

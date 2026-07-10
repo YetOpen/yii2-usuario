@@ -100,6 +100,42 @@ class Token extends ActiveRecord
     }
 
     /**
+     * Opaque single-string form of the token, for clients (e.g. a decoupled SPA) that carry it
+     * as one value instead of the `(id, code)` pair the web routes use.
+     *
+     * `code` is a base64url random string (`[A-Za-z0-9_-]`, never a `.`), so `"{user_id}.{code}"`
+     * is unambiguous to split. Only `user_id` is exposed (already public in the web reset URL);
+     * the secret remains `code`.
+     *
+     * @return string
+     */
+    public function getApiToken()
+    {
+        return $this->user_id . '.' . $this->code;
+    }
+
+    /**
+     * Splits an {@see getApiToken() opaque API token} back into `[userId, code]`.
+     * Returns `[null, null]` for any malformed input, so callers can treat "unparseable"
+     * and "no matching token" identically (no detail leak).
+     *
+     * @param mixed $token
+     * @return array{0: int|null, 1: string|null}
+     */
+    public static function splitApiToken($token)
+    {
+        if (!is_string($token) || strpos($token, '.') === false) {
+            return [null, null];
+        }
+        [$userId, $code] = explode('.', $token, 2);
+        if (!ctype_digit($userId) || $code === '') {
+            return [null, null];
+        }
+
+        return [(int) $userId, $code];
+    }
+
+    /**
      * @throws RuntimeException
      * @return bool             Whether token has expired
      */

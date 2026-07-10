@@ -32,11 +32,34 @@ class PasswordRecoveryService implements ServiceInterface
     protected $mailService;
     protected $securityHelper;
 
+    /**
+     * @var string|null Optional reset-link template with a `{token}` placeholder. When set, the
+     * recovery email links to this URL (a decoupled frontend's reset page) instead of the backend
+     * web route. See {@see setResetUrlTemplate()}.
+     */
+    protected $resetUrlTemplate;
+
     public function __construct($email, MailService $mailService, UserQuery $query)
     {
         $this->email = $email;
         $this->mailService = $mailService;
         $this->query = $query;
+    }
+
+    /**
+     * Points the recovery email at a decoupled frontend's reset page instead of the backend web
+     * route. `$template` is an absolute URL containing a `{token}` placeholder, replaced with the
+     * token's {@see \Da\User\Model\Token::getApiToken() opaque form}. Leave unset (the default) to
+     * keep the built-in web link (`$token->url`).
+     *
+     * @param string|null $template
+     * @return $this
+     */
+    public function setResetUrlTemplate($template)
+    {
+        $this->resetUrlTemplate = $template;
+
+        return $this;
     }
 
     public function run()
@@ -62,6 +85,12 @@ class PasswordRecoveryService implements ServiceInterface
 
             $this->mailService->setViewParam('user', $user);
             $this->mailService->setViewParam('token', $token);
+            if (!empty($this->resetUrlTemplate)) {
+                $this->mailService->setViewParam(
+                    'resetUrl',
+                    strtr($this->resetUrlTemplate, ['{token}' => $token->apiToken])
+                );
+            }
             if (!$this->sendMail($user)) {
                 return false;
             }
