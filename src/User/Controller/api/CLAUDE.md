@@ -26,8 +26,10 @@ is the recovery token.
   address is registered and whether or not the mail sent (upstream failures are only
   logged). Never let this differ by outcome — it would enumerate users.
 - `GET recovery/reset?token=` → `{ valid: bool }`; `POST recovery/reset` (`{ token,
-  password }`) → `{ ok: true }`, or a generic `400` for a bad/expired token or an unmet
-  password rule. Never surface *why* it failed.
+  password }`) → `{ ok: true }`. Two distinct failure shapes on purpose: a bad/expired token
+  is a generic **400** (token state must stay ambiguous — no leak of *why*); a password that
+  fails validation/policy is a **422** with `[{field, message}]` (the chosen-password detail
+  is not sensitive, so the client can show the requirement the user must meet).
 - The web `(id, code)` pair travels as one opaque token — `Token::getApiToken()` /
   `Token::splitApiToken()`.
 - **Reset link points at the frontend, not the backend.** The email URL comes from

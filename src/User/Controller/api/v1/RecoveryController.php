@@ -152,8 +152,17 @@ class RecoveryController extends Controller
         $form->password = $body['password'] ?? null;
 
         if (!$form->validate()) {
-            $errors = $form->getFirstErrors();
-            throw new BadRequestHttpException($errors ? reset($errors) : Yii::t('usuario', 'Password reset failed'));
+            // Surface *why* the password was rejected (e.g. an unmet strength policy) as a 422
+            // with the field errors, so the client can show it. This is distinct from the opaque
+            // 400 used for a bad/expired token: the chosen-password detail is not sensitive (it is
+            // about the value the caller just supplied), whereas token state must stay ambiguous.
+            Yii::$app->response->setStatusCode(422, 'Data Validation Failed.');
+            $result = [];
+            foreach ($form->getFirstErrors() as $field => $message) {
+                $result[] = ['field' => $field, 'message' => $message];
+            }
+
+            return $result;
         }
 
         if (!$this->make(ResetPasswordService::class, [$form->password, $token->user])->run()) {
