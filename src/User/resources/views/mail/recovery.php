@@ -14,7 +14,9 @@ use yii\helpers\Html;
 /**
  * @var \Da\User\Model\User  $user
  * @var \Da\User\Model\Token $token
+ * @var string|null          $resetUrl Frontend reset link; falls back to the backend web route.
  */
+$link = !empty($resetUrl) ? $resetUrl : $token->url;
 ?>
 <p style="font-family: 'Helvetica Neue', 'Helvetica', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; font-weight: normal; margin: 0 0 10px; padding: 0;">
     <?= Yii::t('usuario', 'Hello') ?>,
@@ -28,7 +30,7 @@ use yii\helpers\Html;
     <?= Yii::t('usuario', 'Please click the link below to complete your password reset') ?>.
 </p>
 <p style="font-family: 'Helvetica Neue', 'Helvetica', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; font-weight: normal; margin: 0 0 10px; padding: 0;">
-    <?= Html::a(Html::encode($token->url), $token->url); ?>
+    <?= Html::a(Html::encode($link), $link); ?>
 </p>
 <p style="font-family: 'Helvetica Neue', 'Helvetica', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; font-weight: normal; margin: 0 0 10px; padding: 0;">
     <?= Yii::t('usuario', 'If you cannot click the link, please try pasting the text into your browser') ?>.

@@ -16,6 +16,27 @@ Active REST API controllers live here (the `rest/` sibling folder is deprecated)
 - Authentication is via `JwtHttpBearerAuth` / `module->authenticatorClass`.
   Authentication alone is NOT authorization — add an explicit privilege check.
 
+## `RecoveryController` (password recovery over REST)
+
+REST twin of the web `Da\User\Controller\RecoveryController`, for a decoupled frontend.
+All actions are **public** (`authenticator` unset) — a pre-auth flow whose only credential
+is the recovery token.
+
+- `POST recovery/request` (`{ email }`) → **always** `{ ok: true }`, whether or not the
+  address is registered and whether or not the mail sent (upstream failures are only
+  logged). Never let this differ by outcome — it would enumerate users.
+- `GET recovery/reset?token=` → `{ valid: bool }`; `POST recovery/reset` (`{ token,
+  password }`) → `{ ok: true }`, or a generic `400` for a bad/expired token or an unmet
+  password rule. Never surface *why* it failed.
+- The web `(id, code)` pair travels as one opaque token — `Token::getApiToken()` /
+  `Token::splitApiToken()`.
+- **Reset link points at the frontend, not the backend.** The email URL comes from
+  `Module::$passwordRecoveryUrl` (a `{token}` template) via
+  `PasswordRecoveryService::setResetUrlTemplate()`. This is backend config on purpose: the
+  link host must never be client-supplied (reset-email host injection → phishing). When the
+  property is unset, the request action logs an error and still returns `{ ok: true }`.
+- The recovery token is **deleted after a successful reset** (single use, no replay).
+
 ## `SecurityController::actionLogin`
 
 - Token value comes from `User::getAccessToken()` (base impl throws `NotSupportedException`;

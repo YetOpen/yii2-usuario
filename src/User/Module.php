@@ -305,6 +305,12 @@ class Module extends BaseModule
         'GET permissions' => 'api/v1/auth/permissions',
         'GET roles-by-user' => 'api/v1/auth/roles-by-user',
         'GET permissions-by-user' => 'api/v1/auth/permissions-by-user',
+        // Value is the controller/action relative to the `api/v1` the routePrefix already adds
+        // (cf. adminRestRoutes' `admin/index`), so URL `user/api/v1/recovery/*` → route
+        // `user/api/v1/recovery/*` → Da\User\Controller\api\v1\RecoveryController.
+        'POST recovery/request' => 'recovery/request',
+        'GET recovery/reset' => 'recovery/reset',
+        'POST recovery/reset' => 'recovery/reset',
     ];
 
     /**
@@ -342,6 +348,22 @@ class Module extends BaseModule
      * set — wraps the value in Yii's signed/serialized envelope (readable only by this app).
      */
     public $apiTokenCookieRaw = false;
+
+    /**
+     * @var string|null Reset-link template for the **API** password-recovery flow
+     * ({@see \Da\User\Controller\api\v1\RecoveryController}). An absolute URL to a decoupled
+     * frontend's reset page containing a `{token}` placeholder, e.g.
+     * `https://app.example.com/auth/reset?token={token}`; `{token}` is replaced with the recovery
+     * token's {@see \Da\User\Model\Token::getApiToken() opaque form}.
+     *
+     * This is intentionally **backend configuration**, never a value supplied by the client: a
+     * reset link is emailed to the account owner, so its host must be authoritative and cannot be
+     * influenced by the caller (otherwise a request for someone else's address could carry a
+     * phishing link). When `null`, the API request-recovery action cannot build a usable link and
+     * logs an error while still returning a generic success (no user enumeration). The web flow is
+     * unaffected — it keeps using `Token::getUrl()`.
+     */
+    public $passwordRecoveryUrl = null;
 
     /**
      * @return string with the hit to be used with the give consent checkbox
