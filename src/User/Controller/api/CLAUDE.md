@@ -35,7 +35,11 @@ is the recovery token.
   `PasswordRecoveryService::setResetUrlTemplate()`. This is backend config on purpose: the
   link host must never be client-supplied (reset-email host injection → phishing). When the
   property is unset, the request action logs an error and still returns `{ ok: true }`.
-- The recovery token is **deleted after a successful reset** (single use, no replay).
+- The recovery token is **deleted after a successful reset** (single use, no replay), via
+  `Token::deleteAll()` — **not** the AR instance `delete()`. `delete()` fires
+  `EVENT_BEFORE_DELETE`, which a host app may hook to gate deletions on a user permission; since
+  reset is unauthenticated, that guard would silently veto the cleanup and leave the token
+  replayable. `deleteAll()` issues a plain `DELETE` with no AR events.
 
 ## `SecurityController::actionLogin`
 

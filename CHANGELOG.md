@@ -2,6 +2,7 @@
 
 ## dev
 
+- Fix: API password reset now consumes the recovery token via `Token::deleteAll()` instead of the AR instance `delete()`, so single-use cleanup is not vetoed by a host app's `EVENT_BEFORE_DELETE` permission guard on the unauthenticated reset request (mp1509)
 - New: REST password recovery flow (`api/v1/RecoveryController`): `POST recovery/request`, `GET/POST recovery/reset` with an opaque token; recovery email links to a decoupled frontend via `Module::$passwordRecoveryUrl` instead of the web route (web flow unchanged) (mp1509)
 - New: REST API login via JWT (`api/v1/SecurityController::login`), with optional post-login redirect; JWT generation lives on the User model (gabriél, mp1509)
 - New: REST API for RBAC introspection — roles and permissions scoped by privilege (`api/v1/AuthController`) (gabriél, mp1509)

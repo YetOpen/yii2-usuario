@@ -160,8 +160,13 @@ class RecoveryController extends Controller
             throw new BadRequestHttpException(Yii::t('usuario', 'Password reset failed'));
         }
 
-        // Single use: drop the token so the link cannot be replayed.
-        $token->delete();
+        // Single use: drop the token so the link cannot be replayed. Use deleteAll() rather than
+        // the AR instance delete(): the latter fires EVENT_BEFORE_DELETE, which a host app may
+        // hook to gate deletions behind a user permission — and recovery reset is unauthenticated,
+        // so such a guard would silently veto the cleanup and leave the token replayable. This is
+        // internal housekeeping, not a user-facing delete (Token::beforeSave already uses
+        // deleteAll() for the same table).
+        Token::deleteAll(['user_id' => $token->user_id, 'code' => $token->code, 'type' => Token::TYPE_RECOVERY]);
 
         return ['ok' => true];
     }
