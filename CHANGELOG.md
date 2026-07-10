@@ -2,6 +2,14 @@
 
 ## dev
 
+- New: REST password recovery flow (`api/v1/RecoveryController`): `POST recovery/request`, `GET/POST recovery/reset` with an opaque token; recovery email links to a decoupled frontend via `Module::$passwordRecoveryUrl` instead of the web route (web flow unchanged) (mp1509)
+- New: REST API login via JWT (`api/v1/SecurityController::login`), with optional post-login redirect; JWT generation lives on the User model (gabriél, mp1509)
+- New: REST API for RBAC introspection — roles and permissions scoped by privilege (`api/v1/AuthController`) (gabriél, mp1509)
+- Enh: REST login also sets the access token as an httpOnly cookie, configurable via `Module::$apiTokenCookie*`, with a raw-value option for SSR/BFF layers (mp1509)
+- Enh: Deprecated the legacy `rest/` REST controllers in favour of `api/v1/` (mp1509)
+- Enh: Set `__CLASS__` as the log category in services (AndreScara11)
+- Enh: Added UserBlockService to the Bootstrap classMap (AndreScara11)
+- Fix: Implicit nullable parameter for PHP 8.4 compatibility (TonisOrmisson)
 - Enh: Changed exception thrown in PasswordRecoveryService from `RuntimeException` to `NotFoundException`. (eseperio)
 - New #553: created Da\User\AuthClient\Microsoft365 auth client (edegaudenzi)
 - Ehh: Added SecurityHelper to the Bootstrap classMap
