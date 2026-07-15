@@ -101,6 +101,18 @@ class User extends ActiveRecord implements IdentityInterface
         return $fields;
     }
 
+    public function extraFields()
+    {
+        return [
+            'roles' => function () {
+                return array_values(\Yii::$app->authManager->getRolesByUser($this->id));
+            },
+            'permissions' => function () {
+                return array_values(\Yii::$app->authManager->getPermissionsByUser($this->id));
+            },
+        ];
+    }
+
     /**
      * {@inheritdoc}
      */

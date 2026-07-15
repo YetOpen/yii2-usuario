@@ -287,6 +287,7 @@ class Module extends BaseModule
      * @var array Routes for REST admin controller.
      */
     public $adminRestRoutes = [
+        'GET,HEAD users/me' => 'user/me',
         'GET,HEAD users' => 'admin/index',
         'POST users' => 'admin/create',
         'PUT,PATCH users/<id>' => 'admin/update',
