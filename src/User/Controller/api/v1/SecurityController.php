@@ -35,7 +35,7 @@ class SecurityController extends Controller
 
         $behaviors['authenticator'] = [
             'class' => CompositeAuth::class,
-            'except' => ['login'],
+            'except' => ['login', 'verify'],
         ];
 
         return $behaviors;
@@ -55,15 +55,19 @@ class SecurityController extends Controller
 
         $form->load(Yii::$app->getRequest()->getBodyParams(), '');
 
-        // TODO: implement 2FA authentication
-        // if ($this->module->enableTwoFactorAuthentication && $form->validate()) {
-        //     $user = $form->getUser();
+        if ($form->validate()) {
+            $user = $form->getUser();
 
-        //     if ($user->auth_tf_enabled) {
-        //         Yii::$app->session->set('credentials', ['login' => $form->login, 'pwd' => $form->password]);
-        //         return $this->redirect(['confirm']);
-        //     }
-        // }
+            if ($this->module->enableTwoFactorAuthentication && $user->auth_tf_enabled) {
+                $payload = json_encode(['id' => $user->id, 'expire' => time() + 300]);
+                $tfaToken = Yii::$app->security->encryptByKey($payload, Yii::$app->request->cookieValidationKey);
+
+                return [
+                    'tfa_required' => true,
+                    'tfa_token' => base64_encode($tfaToken),
+                ];
+            }
+        }
 
         $this->trigger(FormEvent::EVENT_BEFORE_LOGIN, $event);
         if ($form->login()) {
@@ -87,6 +91,67 @@ class SecurityController extends Controller
         $this->trigger(FormEvent::EVENT_FAILED_LOGIN, $event);
 
         throw new UnauthorizedHttpException("Login failed. You are unauthorized to perform actions");
+    }
+
+    public function actionVerify()
+    {
+        $body = Yii::$app->getRequest()->getBodyParams();
+        $tfaToken = isset($body['tfa_token']) ? base64_decode($body['tfa_token']) : null;
+        $code = isset($body['code']) ? $body['code'] : null;
+
+        if (!$tfaToken || !$code) {
+            throw new \yii\web\BadRequestHttpException('tfa_token and code are required');
+        }
+
+        $payloadJson = Yii::$app->security->decryptByKey($tfaToken, Yii::$app->request->cookieValidationKey);
+        if (!$payloadJson) {
+            throw new UnauthorizedHttpException('Invalid TFA token');
+        }
+
+        $payload = json_decode($payloadJson, true);
+        if (!$payload || !isset($payload['id']) || !isset($payload['expire']) || time() > $payload['expire']) {
+            throw new UnauthorizedHttpException('Expired or invalid TFA token');
+        }
+
+        $userQuery = $this->make(\Da\User\Query\UserQuery::class);
+        $user = $userQuery->whereId($payload['id'])->one();
+
+        if (!$user || !$user->auth_tf_enabled) {
+            throw new UnauthorizedHttpException('Invalid user or TFA not enabled');
+        }
+
+        // Validate the code
+        $validators = $this->module->twoFactorAuthenticationValidators;
+        $type = $user->auth_tf_type;
+        $class = \yii\helpers\ArrayHelper::getValue($validators, $type . '.class');
+        
+        if (!$class) {
+            throw new \yii\web\ServerErrorHttpException('2FA validator not configured properly.');
+        }
+
+        $validator = $this->make($class, [$user, $code, $this->module->twoFactorAuthenticationCycles]);
+        
+        if (!$validator->validate()) {
+            $codeDurationTime = \yii\helpers\ArrayHelper::getValue($validators, $type . '.codeDurationTime', 300);
+            throw new UnauthorizedHttpException($validator->getUnsuccessLoginMessage($codeDurationTime));
+        }
+
+        $user->updateAttributes([
+            'last_login_at' => time(),
+            'last_login_ip' => $this->module->disableIpLogging ? '127.0.0.1' : Yii::$app->request->getUserIP(),
+        ]);
+
+        $form = $this->make(LoginForm::class);
+        $form->setUser($user);
+        $event = $this->make(FormEvent::class, [$form]);
+        $this->trigger(FormEvent::EVENT_AFTER_LOGIN, $event);
+
+        $token = $user->getAccessToken();
+        $this->sendAccessTokenCookie($token);
+
+        return [
+            'token' => $token,
+        ];
     }
 
     /**
