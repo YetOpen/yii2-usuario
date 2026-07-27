@@ -12,7 +12,10 @@
 namespace Da\User\Controller\api\v1;
 
 use Da\User\Event\FormEvent;
+use Da\User\Factory\MailFactory;
 use Da\User\Form\LoginForm;
+use Da\User\Model\AuthTfRecoveryCode;
+use Da\User\Service\TwoFactorDisableService;
 use Da\User\Traits\ContainerAwareTrait;
 use Da\User\Traits\ModuleAwareTrait;
 use Yii;
@@ -35,7 +38,7 @@ class SecurityController extends Controller
 
         $behaviors['authenticator'] = [
             'class' => CompositeAuth::class,
-            'except' => ['login', 'verify'],
+            'except' => ['login', 'verify', 'recovery-code-verify'],
         ];
 
         return $behaviors;
@@ -124,13 +127,13 @@ class SecurityController extends Controller
         $validators = $this->module->twoFactorAuthenticationValidators;
         $type = $user->auth_tf_type;
         $class = \yii\helpers\ArrayHelper::getValue($validators, $type . '.class');
-        
+
         if (!$class) {
             throw new \yii\web\ServerErrorHttpException('2FA validator not configured properly.');
         }
 
         $validator = $this->make($class, [$user, $code, $this->module->twoFactorAuthenticationCycles]);
-        
+
         if (!$validator->validate()) {
             $codeDurationTime = \yii\helpers\ArrayHelper::getValue($validators, $type . '.codeDurationTime', 300);
             throw new UnauthorizedHttpException($validator->getUnsuccessLoginMessage($codeDurationTime));
@@ -151,6 +154,83 @@ class SecurityController extends Controller
 
         return [
             'token' => $token,
+        ];
+    }
+
+    /**
+     * Uses a recovery code to turn two-factor authentication off — the escape hatch for
+     * when the user's normal second-factor method is no longer reachable (e.g. a lost or
+     * broken phone). This action does NOT log the user in: it only disables 2FA (TOTP
+     * secret + every remaining recovery code, via {@see TwoFactorDisableService}) and
+     * reports success/failure. The user is expected to call {@see actionLogin()} again
+     * afterwards with the same username/password — which will now succeed without a 2FA
+     * challenge, since `auth_tf_enabled` was already true (i.e. the credentials were
+     * already correct the first time; only the second factor was missing) and is now
+     * turned off. They should then re-enroll a working 2FA method.
+     */
+    public function actionRecoveryCodeVerify()
+    {
+        $body = Yii::$app->getRequest()->getBodyParams();
+        $tfaToken = isset($body['tfa_token']) ? base64_decode($body['tfa_token']) : null;
+        $recoveryCode = isset($body['recovery_code']) ? $body['recovery_code'] : null;
+
+        if (!$tfaToken || !$recoveryCode) {
+            throw new \yii\web\BadRequestHttpException('tfa_token and recovery_code are required');
+        }
+
+        $payloadJson = Yii::$app->security->decryptByKey($tfaToken, Yii::$app->request->cookieValidationKey);
+        if (!$payloadJson) {
+            throw new UnauthorizedHttpException('Invalid TFA token');
+        }
+
+        $payload = json_decode($payloadJson, true);
+        if (!$payload || !isset($payload['id']) || !isset($payload['expire']) || time() > $payload['expire']) {
+            throw new UnauthorizedHttpException('Expired or invalid TFA token');
+        }
+
+        $userQuery = $this->make(\Da\User\Query\UserQuery::class);
+        $user = $userQuery->whereId($payload['id'])->one();
+
+        if (!$user || !$user->auth_tf_enabled) {
+            throw new UnauthorizedHttpException('Invalid user or TFA not enabled');
+        }
+
+        // Codes are hashed (see RecoveryCodeGeneratorService), so a matching one can only be
+        // found by checking the submitted value against each stored hash in turn, not by a
+        // direct lookup.
+        $matchedCode = null;
+        foreach (AuthTfRecoveryCode::find()->whereUserId($user->id)->whereUnused()->all() as $candidate) {
+            if (Yii::$app->security->validatePassword($recoveryCode, $candidate->code_hash)) {
+                $matchedCode = $candidate;
+                break;
+            }
+        }
+
+        if ($matchedCode === null) {
+            throw new UnauthorizedHttpException('Invalid or already used recovery code');
+        }
+
+        $this->make(TwoFactorDisableService::class, [$user])->run();
+
+        // TODO: record a security-audit event for this action (user id, ip, timestamp).
+        // Disabling 2FA via a recovery code is exactly the path an attacker would take with
+        // a leaked/stolen code, so — unlike an ordinary successful login — it must leave a
+        // traceable record for later incident investigation, separate from normal login
+        // logging (which only reflects the account that ended up logged in, not that its
+        // second factor was just turned off).
+
+        // Best-effort: the only out-of-band signal that lets the legitimate user notice
+        // and react (re-enable 2FA, contact support) if they weren't the one who did this,
+        // but a mailer failure must not undo the disable that already succeeded.
+        try {
+            MailFactory::makeTwoFactorDisabledMailerService($user)->run();
+        } catch (\Throwable $e) {
+            Yii::error("Failed to send 2FA-disabled notification to user {$user->id}: {$e->getMessage()}", __METHOD__);
+        }
+
+        return [
+            'success' => true,
+            'message' => Yii::t('usuario', 'Two factor authentication has been disabled. Please login again.'),
         ];
     }
 

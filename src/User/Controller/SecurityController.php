@@ -14,11 +14,14 @@ namespace Da\User\Controller;
 use Da\User\Contracts\AuthClientInterface;
 use Da\User\Event\FormEvent;
 use Da\User\Event\UserEvent;
+use Da\User\Factory\MailFactory;
 use Da\User\Form\LoginForm;
+use Da\User\Model\AuthTfRecoveryCode;
 use Da\User\Model\User;
 use Da\User\Query\SocialNetworkAccountQuery;
 use Da\User\Service\SocialNetworkAccountConnectService;
 use Da\User\Service\SocialNetworkAuthenticateService;
+use Da\User\Service\TwoFactorDisableService;
 use Da\User\Traits\ContainerAwareTrait;
 use Da\User\Traits\ModuleAwareTrait;
 use Yii;
@@ -69,7 +72,7 @@ class SecurityController extends Controller
                 'rules' => [
                     [
                         'allow' => true,
-                        'actions' => ['login', 'confirm', 'auth'],
+                        'actions' => ['login', 'confirm', 'recovery-code', 'auth'],
                         'roles' => ['?'],
                     ],
                     [
@@ -238,6 +241,93 @@ class SecurityController extends Controller
             [
                 'model' => $form,
                 'module' => $this->module
+            ]
+        );
+    }
+
+    /**
+     * Uses a recovery code to turn two-factor authentication off — the escape hatch for
+     * when the user's normal second factor is no longer reachable (e.g. a lost or broken
+     * phone). Mirrors {@see \Da\User\Controller\api\v1\SecurityController::actionRecoveryCodeVerify()}
+     * for the session-based web login: it does NOT log the user in, it only disables 2FA
+     * (via {@see TwoFactorDisableService}) and sends them back to the login form, since the
+     * credentials they already gave in {@see actionLogin()} are still valid and will now
+     * succeed without a 2FA challenge.
+     */
+    public function actionRecoveryCode()
+    {
+        if (!Yii::$app->user->getIsGuest()) {
+            return $this->goHome();
+        }
+
+        if (!Yii::$app->session->has('credentials')) {
+            return $this->redirect(['login']);
+        }
+
+        $credentials = Yii::$app->session->get('credentials');
+        $userModel = $this->getClassMap()->get(User::class);
+        $user = $userModel::findOne(['email' => $credentials['login']]);
+        if ($user === null) {
+            $user = $userModel::findOne(['username' => $credentials['login']]);
+        }
+
+        if ($user === null || !$user->auth_tf_enabled) {
+            return $this->redirect(['login']);
+        }
+
+        if (Yii::$app->request->isPost) {
+            $recoveryCode = trim((string) Yii::$app->request->post('recoveryCode'));
+
+            if ($recoveryCode === '') {
+                Yii::$app
+                    ->getSession()
+                    ->setFlash('danger', Yii::t('usuario', 'Please enter a recovery code.'));
+            } else {
+                // Codes are hashed (see RecoveryCodeGeneratorService), so a matching one can
+                // only be found by checking the submitted value against each stored hash in
+                // turn, not by a direct lookup.
+                $matchedCode = null;
+                foreach (AuthTfRecoveryCode::find()->whereUserId($user->id)->whereUnused()->all() as $candidate) {
+                    if (Yii::$app->security->validatePassword($recoveryCode, $candidate->code_hash)) {
+                        $matchedCode = $candidate;
+                        break;
+                    }
+                }
+
+                if ($matchedCode !== null) {
+                    $this->make(TwoFactorDisableService::class, [$user])->run();
+
+                    // Best-effort: the only out-of-band signal that lets the legitimate user
+                    // notice and react (re-enable 2FA, contact support) if they weren't the one
+                    // who did this, but a mailer failure must not undo the disable that already
+                    // succeeded.
+                    try {
+                        MailFactory::makeTwoFactorDisabledMailerService($user)->run();
+                    } catch (\Throwable $e) {
+                        Yii::error("Failed to send 2FA-disabled notification to user {$user->id}: {$e->getMessage()}", __METHOD__);
+                    }
+
+                    Yii::$app->session->set('credentials', null);
+                    Yii::$app
+                        ->getSession()
+                        ->setFlash(
+                            'success',
+                            Yii::t('usuario', 'Two factor authentication has been disabled. Please log in again.')
+                        );
+
+                    return $this->redirect(['login']);
+                }
+
+                Yii::$app
+                    ->getSession()
+                    ->setFlash('danger', Yii::t('usuario', 'Invalid or already used recovery code.'));
+            }
+        }
+
+        return $this->render(
+            'recovery-code',
+            [
+                'module' => $this->module,
             ]
         );
     }

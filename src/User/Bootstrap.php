@@ -319,6 +319,7 @@ class Bootstrap implements BootstrapInterface
             'reconfirmationMailSubject' => Yii::t('usuario', 'Confirm email change on {0}', $app->name),
             'recoveryMailSubject' => Yii::t('usuario', 'Complete password reset on {0}', $app->name),
             'twoFactorMailSubject' => Yii::t('usuario', 'Code for two factor authentication on {0}', $app->name),
+            'twoFactorDisabledMailSubject' => Yii::t('usuario', 'Two factor authentication disabled on {0}', $app->name),
         ];
 
         $module->mailParams = array_merge($defaults, $module->mailParams);
