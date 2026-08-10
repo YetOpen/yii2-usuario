@@ -187,7 +187,7 @@ class UserEntityController extends Controller
                         new PublicKeyCredentialParameters('public-key', -257),
                     ],
                     null,
-                    'direct'
+                    'none'
                 );
 
                 // Full cryptographic verification of the registration ceremony: challenge, origin,

@@ -163,7 +163,9 @@ class UserEntityHelper
                 ['type' => 'public-key', 'alg' => -257],
             ],
             'excludeCredentials' => $excludeCredentials,
-            'attestation' => 'direct',
+            // 'none': avoids requiring a FIDO Metadata Service repository to validate the
+            // attestation certificate chain, which we don't need for a login feature.
+            'attestation' => 'none',
             'timeout' => 60000,
         ];
     }

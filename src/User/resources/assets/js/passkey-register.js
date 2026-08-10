@@ -87,7 +87,9 @@ jQuery(function ($) {
                     type: cred.type
                 })),
                 authenticatorSelection: {
-                    userVerification: "preferred" //with this option set as preferred we can login using also yubikeys
+                    userVerification: "preferred", //with this option set as preferred we can login using also yubikeys
+                    residentKey: "required", //login uses discoverable/resident credentials only (no server-side allowCredentials list)
+                    requireResidentKey: true //legacy alias for older browsers that don't understand residentKey
                 },
                 timeout: options.timeout || 60000,
                 attestation: options.attestation || "direct"
