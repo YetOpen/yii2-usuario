@@ -23,6 +23,12 @@ use yii\db\ActiveRecord;
  */
 class UserEntity extends ActiveRecord
 {
+    /**
+     * Transient, not persisted: carries the base64url-encoded clientDataJSON from the browser
+     * to the controller during the registration ceremony, so it can be verified server-side.
+     */
+    public $client_data_json;
+
     public static function tableName()
     {
         return '{{%user_entity}}';

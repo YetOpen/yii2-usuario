@@ -32,6 +32,19 @@ jQuery(function ($) {
                 .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         }
 
+        function base64UrlToUint8Array(base64UrlString) {
+            let base64 = base64UrlString.replace(/-/g, '+').replace(/_/g, '/');
+            while (base64.length % 4) {
+                base64 += '=';
+            }
+            const binaryString = atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes;
+        }
+
         function generateUUIDv4() {
             return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
                 const r = crypto.getRandomValues(new Uint8Array(1))[0] & 15;
@@ -40,32 +53,44 @@ jQuery(function ($) {
             });
         }
 
+        const csrfToken = yii.getCsrfToken();
+
         try {
+            const challengeRes = await fetch(passkeyChallengeUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify({})
+            });
+            const options = await challengeRes.json();
+            if (!options.success) {
+                alert(window.PasskeyRegisterMessages.genError.replace('{msg}', options.message || ''));
+                $(this).data('creating-credentials', undefined);
+                return false;
+            }
+
             $('#uuid_id').val(generateUUIDv4());
-            const challenge = new Uint8Array(32);
-            //generate a casual challenge and when it's ready it's send to the browser.
-            window.crypto.getRandomValues(challenge);
 
             const publicKey = {
-                challenge: challenge.buffer,
-                rp: {
-                    id: window.location.hostname,
-                    name: window.PasskeyRegisterMessages.psk + " " + numberOfPasskeys,
-                },
+                challenge: base64UrlToUint8Array(options.challenge),
+                rp: options.rp,
                 user: {
-                    id: new TextEncoder().encode(userId),
-                    name: username,
-                    displayName: username
+                    id: new TextEncoder().encode(options.user.id),
+                    name: options.user.name,
+                    displayName: options.user.displayName
                 },
-                pubKeyCredParams: [
-                    { type: "public-key", alg: -7 },
-                    { type: "public-key", alg: -257 }
-                ],
+                pubKeyCredParams: options.pubKeyCredParams,
+                excludeCredentials: (options.excludeCredentials || []).map(cred => ({
+                    id: base64UrlToUint8Array(cred.id),
+                    type: cred.type
+                })),
                 authenticatorSelection: {
                     userVerification: "preferred" //with this option set as preferred we can login using also yubikeys
                 },
-                timeout: 60000,
-                attestation: "direct"
+                timeout: options.timeout || 60000,
+                attestation: options.attestation || "direct"
             };
 
             const credential = await navigator.credentials.create({ publicKey });
@@ -76,8 +101,7 @@ jQuery(function ($) {
 
             $('#credential_id').val(arrayBufferToBase64url(credential.rawId));
             $('#public_key').val(arrayBufferToBase64url(credential.response.attestationObject));
-            $('#attestation_format').val('direct');
-            $('#device_id').val(navigator.userAgent);
+            $('#client_data_json').val(arrayBufferToBase64url(credential.response.clientDataJSON));
             $(this).data('creating-credentials', false).submit();
 
             return true;

@@ -2,17 +2,20 @@
 
 namespace Da\User\Helper;
 
-use CBOR\Decoder;
-use CBOR\Stream;
-use CBOR\StringStream;
-use Da\User\Model\User;
+use Cose\Algorithm\Manager as CoseAlgorithmManager;
+use Cose\Algorithm\Signature\ECDSA\ES256;
+use Cose\Algorithm\Signature\RSA\RS256;
 use Da\User\Model\UserEntity;
 use Da\User\Traits\ModuleAwareTrait;
 use Random\RandomException;
+use Webauthn\AttestationStatement\AndroidKeyAttestationStatementSupport;
+use Webauthn\AttestationStatement\AttestationStatementSupportManager;
+use Webauthn\AttestationStatement\NoneAttestationStatementSupport;
+use Webauthn\AttestationStatement\PackedAttestationStatementSupport;
+use Webauthn\AttestationStatement\TPMAttestationStatementSupport;
 use Webauthn\AuthenticatorAssertionResponseValidator;
-use Webauthn\CeremonyStep\CeremonyStepManager;
-use Webauthn\CeremonyStep\CheckAllowedOrigins;
-use Webauthn\PublicKeyCredentialUserEntity;
+use Webauthn\AuthenticatorAttestationResponseValidator;
+use Webauthn\CeremonyStep\CeremonyStepManagerFactory;
 use Yii;
 
 
@@ -48,45 +51,59 @@ class UserEntityHelper
         }
         return $data;
     }
-    //this function is used to extract the attestation type from the passkeys. the attestation type is the type of device used as the passkey provider
-    public function extractAttestationFormat(string $attestationBase64Url): ?string
+
+    /**
+     * Builds the CeremonyStepManagerFactory shared by registration and login validators.
+     * Configures the exact origin (scheme+host+port) allowed and the attestation formats supported.
+     */
+    private function buildAttestationStatementSupportManager(): AttestationStatementSupportManager
     {
-        $binary = $this->base64UrlDecode($attestationBase64Url);
-        $stream = new \CBOR\StringStream($binary);
-        $decoder = \CBOR\Decoder::create();
-        $object = $decoder->decode($stream);
+        $algorithmManager = CoseAlgorithmManager::create()->add(ES256::create(), RS256::create());
+        return new AttestationStatementSupportManager([
+            new NoneAttestationStatementSupport(),
+            new PackedAttestationStatementSupport($algorithmManager),
+            new AndroidKeyAttestationStatementSupport(),
+            new TPMAttestationStatementSupport(),
+        ]);
+    }
 
-        if (!($object instanceof \CBOR\MapObject)) {
-            return null;
-        }
+    private function buildCeremonyStepManagerFactory(): CeremonyStepManagerFactory
+    {
+        $factory = new CeremonyStepManagerFactory();
+        // Full origin (scheme + host [+ port]), not just the hostname: CheckAllowedOrigins compares
+        // against the full "origin" reported by the browser (see CVE-2026-30964 for what goes wrong
+        // when only the host is compared).
+        $factory->setAllowedOrigins([Yii::$app->request->hostInfo]);
+        $factory->setAttestationStatementSupportManager($this->buildAttestationStatementSupportManager());
 
-        $reflection = new \ReflectionClass($object);
-        $prop = $reflection->getProperty('data');
-        $prop->setAccessible(true);
-        $items = $prop->getValue($object);
+        return $factory;
+    }
 
-        foreach ($items as $item) {
-            $keyProp = (new \ReflectionClass($item))->getProperty('key');
-            $keyProp->setAccessible(true);
-            $key = $keyProp->getValue($item);
+    /**
+     * Loader used to turn the raw (base64url) attestationObject sent by the browser during
+     * registration into a parsed AttestationObject, before it's handed to the attestation validator.
+     */
+    public function createAttestationObjectLoader(): \Webauthn\AttestationStatement\AttestationObjectLoader
+    {
+        return new \Webauthn\AttestationStatement\AttestationObjectLoader($this->buildAttestationStatementSupportManager());
+    }
 
-            $valueProp = (new \ReflectionClass($item))->getProperty('value');
-            $valueProp->setAccessible(true);
-            $value = $valueProp->getValue($item);
+    /**
+     * Validator for the registration ceremony: verifies challenge, origin, rpId hash,
+     * attestation statement/signature and algorithm against what the server requested.
+     */
+    public function createAttestationValidator(): AuthenticatorAttestationResponseValidator
+    {
+        return new AuthenticatorAttestationResponseValidator($this->buildCeremonyStepManagerFactory()->creationCeremony());
+    }
 
-            $keyDataProp = (new \ReflectionClass($key))->getProperty('data');
-            $keyDataProp->setAccessible(true);
-            $keyString = $keyDataProp->getValue($key);
-
-            if ($keyString === 'fmt') {
-                $valueDataProp = (new \ReflectionClass($value))->getProperty('data');
-                $valueDataProp->setAccessible(true);
-                $valueString = $valueDataProp->getValue($value);
-
-                return $valueString;
-            }
-        }
-        return null;
+    /**
+     * Validator for the login ceremony: verifies challenge, origin, rpId hash, and critically
+     * the assertion signature and the sign counter (anti-cloning) against the stored credential.
+     */
+    function createAssertionValidator(): AuthenticatorAssertionResponseValidator
+    {
+        return new AuthenticatorAssertionResponseValidator($this->buildCeremonyStepManagerFactory()->requestCeremony());
     }
 
     /**
@@ -94,52 +111,60 @@ class UserEntityHelper
      */
     public function challengeGeneration(): array
     {
-        $passkeys = UserEntity::find()->Andwhere(['type' => 'public-key'])->all();
-
-        if (empty($passkeys)) {
-            return ['success' => false, 'message' => Yii::t('usuario', 'No passkey registered.')];
-        }
-
-        $credentialDescriptors = array_map(fn($pk) => [
-            'type' => 'public-key',
-            'id' => $pk->credential_id,
-        ], $passkeys);
-
         //effective generation of the challenge
         $challengeRaw = random_bytes(32);
-        $challengeBase64 = rtrim(strtr($this->base64UrlEncode($challengeRaw), "+/", "-_"), "=");
+        $challengeBase64 = $this->base64UrlEncode($challengeRaw);
         $this->storeChallenge($challengeBase64);
-        Yii::$app->session->set('allow_credentials', $credentialDescriptors);
 
         return [
             'success' => true,
             'challenge' => $challengeBase64,
-            'rpId' => Yii::$app->request->hostName,   //hostname of the app it will be useful later (like in the actionLoginPasskey)
-            'allowCredentials' => $credentialDescriptors
+            'rpId' => Yii::$app->request->hostName,
+            // Discoverable/resident-key flow: we deliberately do NOT enumerate credential ids here.
+            // The browser/authenticator itself picks among the resident credentials it holds for
+            // this rpId, so the server never needs to (and must not) hand out every registered
+            // credential_id to an anonymous caller.
+            'allowCredentials' => [],
         ];
     }
 
-    public function challenge($credentialId): array
+    /**
+     * Generates a server-side challenge for the registration ceremony, scoped to the current user.
+     * @throws RandomException
+     */
+    public function challengeGenerationForRegistration(): array
     {
-        if ($credentialId === false) {
-            return ['success' => false, 'message' =>  Yii::t('usuario', 'Invalid credential ID format.')];
-        }
-        $credentialIdB64url = rtrim(strtr($this->base64UrlEncode($credentialId), '+/', '-_'), '=');
-        $passkey = UserEntity::find()->Andwhere(['credential_id' => $credentialIdB64url])->one();
-        if (!$passkey) {
-            Yii::error(Yii::t('usuario', 'Passkey not found for credential ID: ') . bin2hex($credentialId), __METHOD__);
-            return ['success' => false, 'message' => Yii::t('usuario', 'Passkey not found.')];
-        }
-        $user = User::findOne($passkey->user_id);
-        if (!$user) {
-            return ['success' => false, 'message' => Yii::t('usuario', 'User not found.')];
-        }
-        $userEntity = PublicKeyCredentialUserEntity::create($user->username, (string)$user->id, $user->username); //in the table user of usuario we don't have the real name of an account so we create PublicKeyCredentialUserEntity using the username two times
-        $challengeBase64 = $this->retrieveChallenge();
+        $user = Yii::$app->user->identity;
+
+        $challengeRaw = random_bytes(32);
+        $challengeBase64 = $this->base64UrlEncode($challengeRaw);
+        $this->storeChallenge($challengeBase64);
+
+        $existingPasskeys = UserEntity::find()->andWhere(['user_id' => $user->id])->all();
+        $excludeCredentials = array_map(fn($pk) => [
+            'type' => 'public-key',
+            'id' => $pk->credential_id,
+        ], $existingPasskeys);
+
         return [
-            $this->base64UrlDecode($challengeBase64),
-            $userEntity,
-            $passkey,
+            'success' => true,
+            'challenge' => $challengeBase64,
+            'rp' => [
+                'id' => Yii::$app->request->hostName,
+                'name' => Yii::$app->name ?: Yii::$app->request->hostName,
+            ],
+            'user' => [
+                'id' => (string) $user->id,
+                'name' => $user->username,
+                'displayName' => $user->username,
+            ],
+            'pubKeyCredParams' => [
+                ['type' => 'public-key', 'alg' => -7],
+                ['type' => 'public-key', 'alg' => -257],
+            ],
+            'excludeCredentials' => $excludeCredentials,
+            'attestation' => 'direct',
+            'timeout' => 60000,
         ];
     }
 
@@ -168,22 +193,13 @@ class UserEntityHelper
         return $dataProvider;
     }
 
-    //this function is fundamental because while developing (unless you're working on a https application) you must validate your server
-    //address to be trusted by the web-authn library
-    function createAssertionValidator(): AuthenticatorAssertionResponseValidator
-    {
-        $ceremonyStepManager = new CeremonyStepManager([
-            new CheckAllowedOrigins([Yii::$app->request->hostName], false),
-        ]);
-        return new AuthenticatorAssertionResponseValidator($ceremonyStepManager);
-    }
     //this function puts the challenge as a session variable
     public function storeChallenge(?string $challengeBase64): void
     {
         Yii::$app->session->set('webauthn_challenge', $challengeBase64);
     }
     //this function is for retrieve the challenge saved in the session
-    protected function retrieveChallenge(): ?string
+    public function retrieveChallenge(): ?string
     {
         return Yii::$app->session->get('webauthn_challenge') ?: null;
     }
