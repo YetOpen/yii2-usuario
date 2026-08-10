@@ -105,7 +105,10 @@
         "dektrium/yii2-user": "*"
     },
     "extra": {
-        "bootstrap": "Da\\User\\Bootstrap"
+        "bootstrap": "Da\\User\\Bootstrap",
+        "branch-alias": {
+            "dev-security/passkey-review": "1.6.4.x-dev"
+        }
     },
     "repositories": [
         {
