@@ -28,6 +28,7 @@ use Da\User\Query\SocialNetworkAccountQuery;
 use Da\User\Query\UserQuery;
 use Da\User\Search\SessionHistorySearch;
 use Da\User\Service\EmailChangeService;
+use Da\User\Service\RecoveryCodeGeneratorService;
 use Da\User\Service\SessionHistory\TerminateUserSessionsService;
 use Da\User\Service\TwoFactorEmailCodeGeneratorService;
 use Da\User\Service\TwoFactorQrCodeUriGeneratorService;
@@ -517,9 +518,17 @@ class SettingsController extends Controller
         $success = $success && $user->updateAttributes(['auth_tf_enabled' => '1','auth_tf_type' => $choice]);
         $message = $success ? $object->getSuccessMessage() : $object->getUnsuccessMessage($codeDurationTime);
 
+        // Shown once, right after (re)enabling 2FA: only the hash of each code is ever
+        // persisted, so this is the only response that will ever contain them.
+        $recoveryCodes = null;
+        if ($success) {
+            $recoveryCodes = $this->make(RecoveryCodeGeneratorService::class, [$user])->run();
+        }
+
         return [
             'success' => $success,
-            'message' => $message
+            'message' => $message,
+            'recovery_codes' => $recoveryCodes,
         ];
     }
 

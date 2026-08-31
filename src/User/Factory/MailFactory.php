@@ -137,6 +137,31 @@ class MailFactory
     }
 
     /**
+     * Notifies the user that two factor authentication was just turned off on their
+     * account via a recovery code — the only out-of-band signal that lets them notice
+     * and react if they weren't the one who did it (e.g. a leaked/stolen code).
+     *
+     * @param User $user
+     *
+     * @throws InvalidConfigException
+     * @return MailService
+     */
+    public static function makeTwoFactorDisabledMailerService(User $user)
+    {
+        /** @var Module $module */
+        $module = Yii::$app->getModule('user');
+        $to = $user->email;
+
+        $from = $module->mailParams['fromEmail'];
+        $subject = $module->mailParams['twoFactorDisabledMailSubject'];
+        $params = [
+            'user' => $user,
+        ];
+
+        return static::makeMailerService(MailEvent::TYPE_TWOFACTORDISABLED, $from, $to, $subject, 'twofactordisabled', $params);
+    }
+
+    /**
      * Builds a MailerService.
      *
      * @param string                $type

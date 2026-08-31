@@ -63,6 +63,12 @@ $this->params['breadcrumbs'][] = $this->title;
                     </div>
                 </div>
                 <?php ActiveForm::end(); ?>
+                <div class="text-center" style="margin-top: 10px;">
+                    <?= Html::a(
+                        Yii::t('usuario', "Can't access your authentication device? Use a recovery code"),
+                        ['recovery-code']
+                    ) ?>
+                </div>
             </div>
         </div>
     </div>

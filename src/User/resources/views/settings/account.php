@@ -206,6 +206,12 @@ $module = Yii::$app->getModule('user');
     $uri = Url::to(['two-factor', 'id' => $model->getUser()->id]);
     $verify = Url::to(['two-factor-enable', 'id' => $model->getUser()->id]);
     $mobilePhoneRegistration = Url::to(['two-factor-mobile-phone', 'id' => $model->getUser()->id]);
+    $recoveryCodesTitle = json_encode(Yii::t('usuario', 'Save your recovery codes'));
+    $recoveryCodesWarning = json_encode(Yii::t(
+        'usuario',
+        'Each of these codes can be used once to disable two factor authentication if you lose access to your device. Save them somewhere safe: they will not be shown again.'
+    ));
+    $recoveryCodesAck = json_encode(Yii::t('usuario', "I've saved these codes"));
     $js = <<<JS
     var choice = ''; 
     $('#tfmodal')
@@ -241,8 +247,25 @@ $(document)
             if(data.success) {
                 $('#enable_tf_btn, #disable_tf_btn').toggleClass('hide');
                 $('#tfmessage').removeClass('alert-danger').addClass('alert-success').find('p').text(data.message);
-                setTimeout(function() { $('#tfmodal').modal('hide'); }, 2000);
-                window.location.reload();
+                $('.btn-submit-code').addClass('hide');
+
+                if (data.recovery_codes && data.recovery_codes.length) {
+                    var codesHtml = '<div class="alert alert-warning" style="margin-top:15px;">'
+                        + '<strong>' + {$recoveryCodesTitle} + '</strong>'
+                        + '<p>' + {$recoveryCodesWarning} + '</p>'
+                        + '<pre style="white-space:pre-wrap;">' + data.recovery_codes.join('\\n') + '</pre>'
+                        + '</div>'
+                        + '<button type="button" class="btn btn-primary btn-block" id="recoveryCodesAckBtn">'
+                        + {$recoveryCodesAck} + '</button>';
+                    $('#tfmodal .modal-body').append(codesHtml);
+                    $(document).one('click', '#recoveryCodesAckBtn', function() {
+                        $('#tfmodal').modal('hide');
+                        window.location.reload();
+                    });
+                } else {
+                    setTimeout(function() { $('#tfmodal').modal('hide'); }, 2000);
+                    window.location.reload();
+                }
             } else {
                 $('input#tfcode').val('');
                 $('#tfmessage').removeClass('alert-info').addClass('alert-danger').find('p').text(data.message);
