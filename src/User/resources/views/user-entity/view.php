@@ -1,10 +1,14 @@
 <?php
 
+use yii\bootstrap\BootstrapAsset;
 use yii\grid\GridView;
 use yii\helpers\Html;
 
+/** @var yii\web\View $this */
 /** @var yii\data\ActiveDataProvider $dataProvider */
 
+// Glyphicons ship with the Bootstrap 3 assets usuario already depends on: no third-party CDN.
+BootstrapAsset::register($this);
 
 $this->registerCss(<<<CSS
 .btn-no-style {
@@ -17,33 +21,6 @@ $this->registerCss(<<<CSS
     box-shadow: none;
     text-decoration: none;
 }
-CSS);
-
-//needed for loading icons without altering the style of the page
-$this->registerCss(<<<CSS
-@font-face {
-  font-family: 'Glyphicons Halflings';
-  src: url('https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/fonts/glyphicons-halflings-regular.woff2') format('woff2'),
-       url('https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/fonts/glyphicons-halflings-regular.woff') format('woff');
-}
-
-.glyphicon {
-  position: relative;
-  top: 1px;
-  display: inline-block;
-  font-family: 'Glyphicons Halflings';
-  font-style: normal;
-  font-weight: normal;
-  line-height: 1;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.glyphicon-pencil:before { content: "\\270f"; }
-.glyphicon-trash:before { content: "\\e020"; }
-.glyphicon-user:before { content: "\\e008"; }
-.glyphicon-time:before { content: "\\e023"; }
-.glyphicon-flash:before { content: "\\e162"; }
 CSS);
 ?>
 
@@ -67,16 +44,15 @@ CSS);
                 'value' => fn($model) => Yii::$app->formatter->asDatetime($model->created_at),
             ],
             [
-                'label' => Yii::t('usuario','Expiration date'),
+                'label' => Yii::t('usuario', 'Expiration date'),
                 'value' => function ($model) {
                     $module = Yii::$app->getModule('user');
-                    $maxAgeDays = $module->maxPasskeyAge;
-                    $lastUsed = new \DateTime($model->last_used_at ?? $model->created_at);
-                    $lastUsed->modify("+{$maxAgeDays} days")->format("Y-m-d");
-                    $lastUsed = Yii::$app->formatter->asDate($lastUsed);
-                    return $lastUsed;
-
-                }
+                    $ts = (int) ($model->last_used_at ?: $model->created_at);
+                    $expiration = (new \DateTimeImmutable())
+                        ->setTimestamp($ts)
+                        ->modify('+' . (int) $module->maxPasskeyAge . ' days');
+                    return Yii::$app->formatter->asDate($expiration);
+                },
             ],
             [
                 'class' => 'yii\grid\ActionColumn',
@@ -108,7 +84,6 @@ CSS);
                         ]
                     ),
                 ],
-
             ],
         ],
     ]); ?>

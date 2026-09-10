@@ -10,7 +10,7 @@
  */
 
 use Da\User\resources\assets\PasskeyAsset;
-use Da\User\Service\UserEntityTraductionService;
+use Da\User\Service\TranslationService;
 use Da\User\Widget\ConnectWidget;
 use yii\helpers\Html;
 use yii\widgets\ActiveForm;
@@ -21,8 +21,8 @@ use yii\widgets\ActiveForm;
  * @var \Da\User\Module         $module
  */
 
-$jsTranslations = UserEntityTraductionService::translationPasskeyLoginJs();
-//including the traductions for the asset passkey-login.js
+$jsTranslations = TranslationService::translationPasskeyLoginJs();
+// translations for the passkey-login.js asset
 ?><script>window.PasskeyLoginMessages = <?= json_encode($jsTranslations, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;</script>
 <?php
 $this->title = Yii::t('usuario', 'Sign in');
@@ -91,7 +91,13 @@ JS
                     ['class' => 'btn btn-primary btn-block', 'tabindex' => '3']
                 ) ?>
                 <?php if ($module->enablePasskeyLogin): ?>
-                <?= Html::a(Yii::t('usuario','Passkey Login'), ['/user/user-entity/login-passkey'], ['id' => 'passkey-login-btn', 'class' => 'btn btn-primary btn-block','tabindex' => '7']) ?>
+                <?= Html::button(Yii::t('usuario', 'Passkey Login'), [
+                    'type' => 'button',
+                    'id' => 'passkey-login-btn',
+                    'class' => 'btn btn-primary btn-block',
+                    'tabindex' => '7',
+                    'data-url' => \yii\helpers\Url::to(['/user/user-entity/login-passkey']),
+                ]) ?>
                 <?php endif ?>
 
                 <?php ActiveForm::end(); ?>

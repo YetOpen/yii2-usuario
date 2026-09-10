@@ -408,7 +408,6 @@ class Bootstrap implements BootstrapInterface
                 'SessionHistory',
                 'AbstractAuthItem',
                 'Rule',
-                'UserEntity',
             ],
             'Da\User\Search' => [
                 'UserSearch',

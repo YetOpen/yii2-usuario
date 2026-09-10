@@ -4,7 +4,11 @@ namespace Da\User\Service;
 
 use Yii;
 
-class UserEntityTraductionService
+/**
+ * Builds the message bundles handed to the passkey JavaScript assets, so the client-side strings
+ * go through the same `usuario` translations as the rest of the module.
+ */
+class TranslationService
 {
     public static function translationPasskeyLoginJs()
     {

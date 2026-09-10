@@ -1,109 +1,129 @@
 # How to Implement and Use Passkeys
 
-<h3>Enabling Passkeys
--------------------------------
-To enable passkey support in your application, follow these steps:
+Passkeys let a user sign in with a WebAuthn credential (a platform authenticator such as Windows
+Hello / Touch ID, or a roaming authenticator such as a YubiKey) instead of a password.
 
-1. **Run the migration** that creates the `user_entity` table, which is required to store passkey credentials.  
-   You can find the migration file here:  
+## Requirements and preconditions
+
+- **PHP >= 8.1** and the WebAuthn stack, which is an optional dependency:
+
+  ```bash
+  composer require web-auth/webauthn-framework spomky-labs/cbor-php symfony/uid
+  ```
+
+- **HTTPS is mandatory.** Browsers only expose the WebAuthn API on secure origins (`https://`, or
+  `http://localhost` for development). Nothing works over plain `http` on a real host.
+- **A server-side session.** The ceremony challenge is stored in the session; a session-less or
+  fully stateless setup is not supported.
+- The **Relying Party ID** is derived from `Yii::$app->request->hostName`. Credentials are bound to
+  that host: if the application domain changes, previously registered passkeys stop working and
+  users must register new ones.
+
+## Enabling passkeys
+
+1. **Run the migration** that creates the `user_entity` table:
    [`m000000_000011_create_user_entity_table.php`](../../src/User/Migration/m000000_000011_create_user_entity_table.php)
 
-2. **Enable passkey functionality** in your application configuration by overriding the `user` module settings.  
-   Add or update the following in your configuration file:
+2. **Turn the feature on** in your module configuration:
 
    ```php
    'modules' => [
        'user' => [
            'class' => Da\User\Module::class,
-           'enablePasskeyLogin' => true,     // Enables login using passkeys
+           'enablePasskeyLogin' => true,
        ],
-   ], 
-      ```
-after you set the `enablePasskeyLogin`, you'll be able to see the button `Passkey Login` in the login form of usuario. But it won't work if you don't have any passkey saved.
+   ],
+   ```
 
-<h3>Supported Passkey (Attestation Formats)</h3>
+   `enablePasskeyLogin` is a real kill switch: while it is `false` every passkey route (including the
+   login ceremony) returns `404`, so disabling it also revokes passkey access, not just the button
+   on the login form.
 
-- **None Attestation**
-    - No attestation is provided.
-    - Used when the authenticator does not supply evidence about its provenance.
+Once enabled, a **Passkey Login** button appears on the usuario login form. It does nothing until
+the signed-in user has registered at least one passkey from
+`/user/user-entity/index-passkey` (or the pretty route `user/passkey/index`).
 
-- **Packed Attestation**
-    - A commonly used attestation format.
-    - Supports multiple cryptographic algorithms for verifying device authenticity.
+## Attestation
 
-- **Android Key Attestation**
-    - Specific to Android devices.
-    - Ensures that keys are securely generated and stored in Android Keystore.
+Registration is performed with `attestation: 'none'`: the server does **not** verify an attestation
+certificate chain and therefore does not need a FIDO Metadata Service repository. The
+`attestation_type` column records the attestation type the authenticator reported
+(`none | basic | self | attca | anonca`), for information only — in practice this is almost always
+`none`. Packed / TPM / Android Key *attestation formats* are not validated or required.
 
-- **TPM Attestation**
-    - Uses Trusted Platform Module (TPM).
-    - Provides hardware-backed attestation for strong security guarantees.
+## Discoverable (resident) credentials
 
-For example as passkey providers we can use bitwarden, yubikeys etc.
+Registration requests `residentKey: 'required'`. The login ceremony sends an **empty**
+`allowCredentials` list and relies entirely on the authenticator picking a discoverable credential
+for the RP. Consequence: a non-discoverable credential can never be used to sign in. This is why the
+`residentKey` requirement is load-bearing and must not be relaxed.
 
+## Two-factor authentication
 
-<h3>Views Paths
--------------------------------
-If you have followed all the steps above now you're able to use passkeys!
-So the paths to access the views are: 
-- `/user/user-entity/index-passkey` the index page of the passkeys. In this page the user will be able to see all of his passkeys and manage them (update/create/delete).
-- `/user/user-entity/create-passkey` the page for creating a new passkey.
+By default a passkey login is treated as a complete, strong authentication: a user who also has 2FA
+enabled is **not** asked for the second factor after a passkey login (a verified passkey is device
+possession + user verification, and is phishing-resistant).
 
-<h3>Extra Configurations
--------------------------------
-You can add extra configurations, like adding an expiration date for the passkey or decide whether to show or not some notification related to passkeys to the user. To do so
-add or update the following in your configuration file (like you did for enabling passkeys):
+If an organisational policy requires the second factor regardless of the login method, set:
 
-   ```php
-   'modules' => [
-       'user' => [
-           'class' => Da\User\Module::class,
-               'enablePasskeyPopUp' => true,    
-               'enablePasskeyExpiringNotification' => true,    
-               'maxPasskeysForUser' => 10,    
-               'maxPasskeyAge' => 365,    
-               'passkeyExpirationTimeLimit' => 30,    
-       ],
-   ], 
-   ```         
-Let's see in detail what these do:
-- `enablePasskeyPopUp` Whether to enable a modal that suggest the user to use a passkey.
-  This pop-up will be shown if the user doesn't have any passkeys, if the passkey login is enabled
-  and only after the login.
-- `enablePasskeyExpiringNotification` Whether to enable a modal that remembers the user that one (or more) of his
-  passkeys are expiring. This message will be shown after the login. After the user dismiss the modal for 3 times they won't be notified anymore about that passkey that is expiring.
-- `maxPasskeysForUser` The maximum number of passkey for user.
-  Usally this value is set between 5 and 10 passkeys.
-- `maxPasskeyAge` Time before the passkey will be eliminated since the last use.
-    Usally this time is set between 6 and 12 months.
-    This variable counts how many days before this will happen.
-- `passkeyExpirationTimeLimit` The number of days before the user receives an alert saying that his passkey is expiring.
- Usually this value is set between 15 and 30 days.
-         
-Be aware that by default all the configurations are set to false. Only the 3 ones that are used to determine the age of the passkey are set by default with the values above.
+```php
+'passkeyLoginRequiresTwoFactor' => true,
+```
 
-If you want to show the modals you need another extra step.
-<h3>Passkey Widgets
--------------------------
+With that flag on, a passkey login is refused for any account that has 2FA enabled and the user is
+asked to sign in with password + 2FA instead.
 
-<h4>- UserEntityPasskeyWidget</h4>
+Passkey logins go through the same account-state checks as a password login: blocked accounts and
+(when `enableEmailConfirmation` is on and `allowUnconfirmedEmailLogin` is off) unconfirmed accounts
+are rejected.
 
-- **What it does**: Displays a pop-up immediately after login if you haven't registered any passkeys yet.
-- **How to use it**: Just add this line in your view (e.g., layout or dashboard):
+## Views / routes
 
-  ```php
-  echo \\Da\\User\\Widget\\UserEntityPasskeyWidget::widget();
-  ```
+- `user/passkey/index` (`/user/user-entity/index-passkey`) — list and manage the current user's passkeys.
+- `user/passkey/create` (`/user/user-entity/create-passkey`) — register a new passkey.
 
----
+## Expiration and maintenance
 
-<h4>- UserEntityExpiringWidget</h4>
+```php
+'modules' => [
+    'user' => [
+        'class' => Da\User\Module::class,
+        'enablePasskeyPopUp' => true,
+        'enablePasskeyExpiringNotification' => true,
+        'maxPasskeysForUser' => 10,
+        'maxPasskeyAge' => 365,
+        'passkeyExpirationTimeLimit' => 30,
+    ],
+],
+```
 
-- **What it does**: Shows a notification once a user's passkey is approaching its expiration date.
-- **How to use it**: Insert this in your view (e.g., layout or dashboard):
+- `enablePasskeyPopUp` — after a password login, show a modal suggesting the user register a passkey
+  (only when they have none and `enablePasskeyLogin` is on).
+- `enablePasskeyExpiringNotification` — after login, show a modal for passkeys entering their expiry
+  window. Dismissing it three times hides it for that passkey; this is a best-effort browser cookie,
+  not a per-user, cross-device setting, and it resets when cookies are cleared.
+- `maxPasskeysForUser` — hard cap per user (typically 5–10).
+- `maxPasskeyAge` — days of inactivity after which a passkey is considered expired (typically
+  180–365).
+- `passkeyExpirationTimeLimit` — days before expiry that the warning starts showing (typically
+  15–30).
 
-  ```php
-  echo \\Da\\User\\Widget\\UserEntityExpiringWidget::widget();
-  ```
+To actually delete expired passkeys, schedule the console command (e.g. daily):
 
----
+```bash
+php yii user/user-entity/delete-expired-passkeys
+php yii user/user-entity/delete-expired-passkeys --dryRun   # report only, no deletion
+```
+
+It reads the live module configuration (so `maxPasskeyAge` in the **console** config applies) and
+never deletes a user's last remaining passkey. A passkey row holds the only copy of its public key,
+so deletion is irreversible — start with `--dryRun`.
+
+## Widgets
+
+Add these to a layout or dashboard view to render the pop-ups configured above:
+
+```php
+echo \Da\User\Widget\UserEntityPasskeyWidget::widget();   // "register a passkey" suggestion
+echo \Da\User\Widget\UserEntityExpiringWidget::widget();  // "a passkey is expiring" notice
+```

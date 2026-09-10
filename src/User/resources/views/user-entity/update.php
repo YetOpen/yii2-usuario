@@ -23,8 +23,8 @@ $this->title = Yii::t('usuario','Update Passkey: ') . Html::encode($model->name)
         <tbody>
         <tr><th><?=(Yii::t('usuario','Device ID')) ?></th><td><?= Html::encode($model->device_id) ?></td></tr>
         <tr><th><?=(Yii::t('usuario','Sign Count')) ?></th><td><?= Html::encode($model->sign_count) ?></td></tr>
-        <tr><th><?=(Yii::t('usuario','Last Used At')) ?></th><td><?= $model->last_used_at ?: '-' ?></td></tr>
-        <tr><th><?=(Yii::t('usuario','Created At')) ?></th><td><?= $model->created_at ?></td></tr>
+        <tr><th><?=(Yii::t('usuario','Last Used At')) ?></th><td><?= $model->last_used_at ? Yii::$app->formatter->asDatetime($model->last_used_at) : '-' ?></td></tr>
+        <tr><th><?=(Yii::t('usuario','Created At')) ?></th><td><?= Yii::$app->formatter->asDatetime($model->created_at) ?></td></tr>
         </tbody>
     </table>
 

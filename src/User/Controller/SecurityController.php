@@ -158,12 +158,14 @@ class SecurityController extends Controller
 
                 $this->trigger(FormEvent::EVENT_AFTER_LOGIN, $event);
 
-
-                if (!Yii::$app->user->isGuest &&
-                    isset($this->module->enablePasskeyLogin) &&
-                    \Da\User\Model\UserEntity::find()->where(['user_id' => Yii::$app->user->id])->count() === 0) {
+                // Offer the "register a passkey" pop-up only when the feature and the pop-up are both
+                // enabled and the user has no passkey yet. `isset()` on the declared property is always
+                // true, so the flag has to be read directly. count() may be a string on some drivers.
+                if (!Yii::$app->user->isGuest
+                    && $this->module->enablePasskeyLogin
+                    && $this->module->enablePasskeyPopUp
+                    && \Da\User\Model\UserEntity::find()->where(['user_id' => Yii::$app->user->id])->count() == 0) {
                     Yii::$app->session->set('passkey_pop-up', true);
-
                 }
 
                 return $this->goBack();

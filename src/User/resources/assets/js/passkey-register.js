@@ -45,14 +45,6 @@ jQuery(function ($) {
             return bytes;
         }
 
-        function generateUUIDv4() {
-            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-                const r = crypto.getRandomValues(new Uint8Array(1))[0] & 15;
-                const v = c === 'x' ? r : (r & 0x3 | 0x8);
-                return v.toString(16);
-            });
-        }
-
         const csrfToken = yii.getCsrfToken();
 
         try {
@@ -70,8 +62,6 @@ jQuery(function ($) {
                 $(this).data('creating-credentials', undefined);
                 return false;
             }
-
-            $('#uuid_id').val(generateUUIDv4());
 
             const publicKey = {
                 challenge: base64UrlToUint8Array(options.challenge),
@@ -92,7 +82,8 @@ jQuery(function ($) {
                     requireResidentKey: true //legacy alias for older browsers that don't understand residentKey
                 },
                 timeout: options.timeout || 60000,
-                attestation: options.attestation || "direct"
+                // server verifies with attestation 'none'; never request a stronger conveyance here
+                attestation: options.attestation || "none"
             };
 
             const credential = await navigator.credentials.create({ publicKey });

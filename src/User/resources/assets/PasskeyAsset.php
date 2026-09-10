@@ -6,11 +6,13 @@ use yii\web\AssetBundle;
 
 class PasskeyAsset extends AssetBundle
 {
-    public $sourcePath = __DIR__;
+    // Point at the js/ subdirectory only: with __DIR__ the bundle would publish PasskeyAsset.php
+    // itself into the web-served assets directory.
+    public $sourcePath = __DIR__ . '/js';
 
     public $js = [
-        'js/passkey-login.js',
-        'js/passkey-register.js',
+        'passkey-login.js',
+        'passkey-register.js',
     ];
 
     public $depends = [

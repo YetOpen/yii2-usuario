@@ -14,49 +14,51 @@ class UserEntityExpiringWidget extends Widget
 
     public function run()
     {
-        parent::run();
-        /** @var User $user */
         $module = $this->getModule();
+        /** @var User|null $user */
         $user = Yii::$app->user->identity;
-        if(!isset($user) || !$module->enablePasskeyExpiringNotification){
+        if ($user === null || !$module->enablePasskeyExpiringNotification) {
             return '';
-        } else{
-            $expiringPasskeys = $user->getUserEntities()->expiring()->all();
-            if (count($expiringPasskeys) >= 1) {
-                $popupData = $this->generatePopupData($expiringPasskeys);
-                echo $this->render('user-entity/pop-up-expiration', [
-                    'popupData' => $popupData,
-                    'count' => count($popupData),
-                ]);
-            }
         }
-    }
 
+        $expiringPasskeys = $user->getUserEntities()->expiring()->all();
+        if (empty($expiringPasskeys)) {
+            return '';
+        }
+
+        $popupData = $this->buildPopupData($expiringPasskeys);
+
+        return $this->render('user-entity/pop-up-expiration', [
+            'popupData' => $popupData,
+            'count' => count($popupData),
+        ]);
+    }
 
     /**
      * @param UserEntity[] $expiringPasskeys
-     * @return array
-     * @throws \DateMalformedStringException
+     * @return array<int, array{id:int, name:string, daysLeft:int, expirationDate:string}>
      */
-    public function generatePopupData($expiringPasskeys)
+    private function buildPopupData(array $expiringPasskeys): array
     {
         $popupData = [];
+        $maxAgeDays = (int) $this->getModule()->maxPasskeyAge;
+        $now = new \DateTimeImmutable();
 
-        $maxAgeMonths = $this->module->maxPasskeyAge;
-        $daysTr = Yii::t('usuario','days');
         foreach ($expiringPasskeys as $passkey) {
-            $lastUsedAt = $passkey->last_used_at ?: $passkey->created_at ?: date('Y-m-d');
-            $createdAt = new \DateTime($lastUsedAt);
-            $expirationDate = (clone $createdAt)->modify("+$maxAgeMonths . $daysTr");
-            $now = new \DateTime();
-            $daysLeft = $now->diff($expirationDate)->days;
+            $lastActivity = (int) ($passkey->last_used_at ?: $passkey->created_at ?: time());
+            $expirationDate = (new \DateTimeImmutable())
+                ->setTimestamp($lastActivity)
+                ->modify("+{$maxAgeDays} days");
+            $daysLeft = (int) $now->diff($expirationDate)->format('%r%a');
+
             $popupData[] = [
-                'id' => $passkey->id,
+                'id' => (int) $passkey->id,
                 'name' => $passkey->name ?? '-',
-                'daysLeft' => $daysLeft,
+                'daysLeft' => max(0, $daysLeft),
                 'expirationDate' => $expirationDate->format('Y-m-d'),
             ];
         }
+
         return $popupData;
     }
 }

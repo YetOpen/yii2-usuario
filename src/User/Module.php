@@ -229,11 +229,12 @@ class Module extends BaseModule
         'forgot/<email:[a-zA-Z0-9_.±]+@[a-zA-Z0-9-]+.[a-zA-Z0-9-.]+>' => 'recovery/request',
         'recover/<id:\d+>/<code:[A-Za-z0-9_-]+>' => 'recovery/reset',
         'passkey/create' => 'user-entity/create-passkey',
+        'passkey/challenge' => 'user-entity/create-passkey-challenge',
         'passkey/store' => 'user-entity/store-passkey',
         'passkey/index' => 'user-entity/index-passkey',
-        'passkey/update' => 'user-entity/update-passkey',
-        'passkey/delete' => 'user-entity/delete-passkey',
-        'passkey/pop-up' => 'user-entity/popup-passkey',
+        'passkey/login' => 'user-entity/login-passkey',
+        'passkey/update/<id:\d+>' => 'user-entity/update-passkey',
+        'passkey/delete/<id:\d+>' => 'user-entity/delete-passkey',
     ];
     /**
      * @var string
@@ -318,6 +319,17 @@ class Module extends BaseModule
      * @var boolean Whether to enable the login using passkeys.
      */
     public $enablePasskeyLogin = false;
+
+    /**
+     * @var boolean Whether a passkey login must still be completed with the second factor for
+     *              users that have two factor authentication enabled.
+     *              Default `false`: a verified passkey (device possession + user verification, and
+     *              phishing-resistant) is treated as a strong, self-sufficient authentication method.
+     *              Set to `true` if an organisational/compliance policy mandates the second factor
+     *              regardless of the login method; in that case a passkey login is refused for
+     *              accounts with 2FA enabled and the user is asked to sign in with password + 2FA.
+     */
+    public $passkeyLoginRequiresTwoFactor = false;
 
     /**
      * @var boolean Whether to enable a modal that suggest the user to use a passkey.

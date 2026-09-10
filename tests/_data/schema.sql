@@ -86,6 +86,28 @@ CREATE TABLE `user` (
   UNIQUE KEY `user_unique_username` (`username`)
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8;
 
+-- ----------------------------
+--  Table structure for `user_entity` (passkey credentials)
+-- ----------------------------
+DROP TABLE IF EXISTS `user_entity`;
+CREATE TABLE `user_entity` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `credential_id` varchar(512) NOT NULL,
+  `public_key` text NOT NULL,
+  `sign_count` bigint(20) NOT NULL DEFAULT '0',
+  `type` varchar(32) NOT NULL,
+  `attestation_type` varchar(32) NOT NULL DEFAULT 'none',
+  `device_id` varchar(512) DEFAULT NULL,
+  `created_at` int(11) NOT NULL,
+  `last_used_at` int(11) DEFAULT NULL,
+  `name` varchar(128) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx-user_entity-credential_id` (`credential_id`),
+  KEY `idx-user_entity-user_id` (`user_id`),
+  CONSTRAINT `fk_user_entity_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
 
 DROP TABLE IF EXISTS `auth_assignment`;
 CREATE TABLE `auth_assignment` (

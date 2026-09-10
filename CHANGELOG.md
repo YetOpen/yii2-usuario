@@ -2,7 +2,7 @@
 
 ## dev
 
-- Enh: Added the possibility to create and login using passkeys. (Ettore)
+- Enh: Added passkey (WebAuthn) registration and login. The WebAuthn stack (`web-auth/webauthn-framework`, `spomky-labs/cbor-php`, `symfony/uid`) is an optional dependency; enable with `enablePasskeyLogin`. (Ettore; security review and hardening by alessioarrigoni)
 - Enh: Changed exception thrown in PasswordRecoveryService from `RuntimeException` to `NotFoundException`. (eseperio)
 - New #553: created Da\User\AuthClient\Microsoft365 auth client (edegaudenzi)
 - Ehh: Added SecurityHelper to the Bootstrap classMap

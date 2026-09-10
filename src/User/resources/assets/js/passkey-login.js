@@ -1,7 +1,7 @@
 (jQuery(function($) {
     $.fn.loginWithPasskey = async function() {
 
-        const href = $(this).attr('href')
+        const href = $(this).data('url') || $(this).attr('href')
         const csrfToken = yii.getCsrfToken();
 
         function base64UrlEncode(buffer) {
@@ -49,7 +49,7 @@
                 challenge: base64UrlToUint8Array(initData.challenge),
                 timeout: 60000,
                 rpId: initData.rpId,
-                allowCredentials: initData.allowCredentials.map(cred => ({
+                allowCredentials: (initData.allowCredentials || []).map(cred => ({
                     id: base64UrlToUint8Array(cred.id),
                     type: cred.type,
                     transports: cred.transports

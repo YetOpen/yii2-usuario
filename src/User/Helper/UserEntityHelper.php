@@ -6,7 +6,6 @@ use Cose\Algorithm\Manager as CoseAlgorithmManager;
 use Cose\Algorithm\Signature\ECDSA\ES256;
 use Cose\Algorithm\Signature\RSA\RS256;
 use Da\User\Model\UserEntity;
-use Da\User\Traits\ModuleAwareTrait;
 use Random\RandomException;
 use Webauthn\AttestationStatement\AndroidKeyAttestationStatementSupport;
 use Webauthn\AttestationStatement\AttestationStatementSupportManager;
@@ -25,7 +24,12 @@ use Yii;
 
 class UserEntityHelper
 {
-    use ModuleAwareTrait;
+    /**
+     * @var int seconds a stored challenge stays valid server-side. The `timeout` sent to the browser
+     *          is advisory only; this is the value that is actually enforced.
+     */
+    public const CHALLENGE_TTL = 120;
+
     public function base64UrlDecode(string $data): string
     {
         $remainder = strlen($data) % 4;
@@ -38,18 +42,6 @@ class UserEntityHelper
     public function base64UrlEncode(string $data): string
     {
         return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
-    }
-
-    function utf8ize($data)
-    {
-        if (is_array($data)) {
-            foreach ($data as $key => $value) {
-                $data[$key] = $this->utf8ize($value);
-            }
-        } elseif (is_string($data)) {
-            return mb_convert_encoding($data, 'UTF-8', 'UTF-8');
-        }
-        return $data;
     }
 
     /**
@@ -114,7 +106,7 @@ class UserEntityHelper
         //effective generation of the challenge
         $challengeRaw = random_bytes(32);
         $challengeBase64 = $this->base64UrlEncode($challengeRaw);
-        $this->storeChallenge($challengeBase64);
+        $this->storeChallenge($challengeBase64, 'login');
 
         return [
             'success' => true,
@@ -138,7 +130,7 @@ class UserEntityHelper
 
         $challengeRaw = random_bytes(32);
         $challengeBase64 = $this->base64UrlEncode($challengeRaw);
-        $this->storeChallenge($challengeBase64);
+        $this->storeChallenge($challengeBase64, 'registration');
 
         $existingPasskeys = UserEntity::find()->andWhere(['user_id' => $user->id])->all();
         $excludeCredentials = array_map(fn($pk) => [
@@ -170,16 +162,6 @@ class UserEntityHelper
         ];
     }
 
-    //this function checks if the current can access the passkey pages
-    public function checkAccessConditions() : bool
-    {
-        $module = $this->getModule();
-        if(Yii::$app->user->isGuest||!$module->enablePasskeyLogin){
-            return false;
-        }
-        return true;
-    }
-
     public function loadTableData(){
         $dataProvider = new \yii\data\ActiveDataProvider([
             'query' => \Da\User\Model\UserEntity::find()->Andwhere(['user_id' => Yii::$app->user->id]),
@@ -195,14 +177,44 @@ class UserEntityHelper
         return $dataProvider;
     }
 
-    //this function puts the challenge as a session variable
-    public function storeChallenge(?string $challengeBase64): void
+    /**
+     * Stores (or, with null, clears) the ceremony challenge in the session. Registration and login
+     * use separate keys so two open tabs don't clobber each other's challenge; an issue timestamp is
+     * kept alongside so {@see retrieveChallenge()} can enforce a server-side TTL.
+     *
+     * @param string|null $challengeBase64
+     * @param string      $scope 'login' or 'registration'
+     */
+    public function storeChallenge(?string $challengeBase64, string $scope = 'login'): void
     {
-        Yii::$app->session->set('webauthn_challenge', $challengeBase64);
+        $key = $this->challengeSessionKey($scope);
+        if ($challengeBase64 === null) {
+            Yii::$app->session->remove($key);
+            return;
+        }
+        Yii::$app->session->set($key, ['value' => $challengeBase64, 'issuedAt' => time()]);
     }
-    //this function is for retrieve the challenge saved in the session
-    public function retrieveChallenge(): ?string
+
+    /**
+     * Returns the stored challenge for the given scope, or null if it is missing or older than
+     * {@see CHALLENGE_TTL} seconds.
+     *
+     * @param string $scope 'login' or 'registration'
+     */
+    public function retrieveChallenge(string $scope = 'login'): ?string
     {
-        return Yii::$app->session->get('webauthn_challenge') ?: null;
+        $data = Yii::$app->session->get($this->challengeSessionKey($scope));
+        if (!is_array($data) || empty($data['value'])) {
+            return null;
+        }
+        if (!isset($data['issuedAt']) || (time() - (int) $data['issuedAt']) > self::CHALLENGE_TTL) {
+            return null;
+        }
+        return $data['value'];
+    }
+
+    private function challengeSessionKey(string $scope): string
+    {
+        return 'webauthn_challenge_' . ($scope === 'registration' ? 'registration' : 'login');
     }
 }

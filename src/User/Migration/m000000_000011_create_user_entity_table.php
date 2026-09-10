@@ -26,16 +26,26 @@ class m000000_000011_create_user_entity_table extends Migration
         $this->createTable('{{%user_entity}}', [
             'id' => $this->primaryKey(),
             'user_id' => $this->integer()->notNull(),
-            'credential_id' => $this->string()->notNull(),
+            // base64url-encoded credential id (~4/3 of the raw byte length). 512 covers every
+            // authenticator seen in practice; resident keys (which this feature requires) use short
+            // random ids. Kept short enough to be a UNIQUE index under utf8mb4.
+            'credential_id' => $this->string(512)->notNull(),
             'public_key' => $this->text()->notNull(),
             'sign_count' => $this->bigInteger()->notNull()->defaultValue(0),
             'type' => $this->string(32)->notNull(),
-            'attestation_format' => $this->string(64)->notNull(),
-            'device_id' => $this->string(128)->null(),
-            'created_at' => $this->timestamp()->defaultExpression('CURRENT_TIMESTAMP'),
-            'last_used_at' => $this->timestamp()->null(),
+            'attestation_type' => $this->string(32)->notNull()->defaultValue('none'),
+            // user-agent hint, not a stable identifier
+            'device_id' => $this->string(512)->null(),
+            // UNIX timestamps, consistent with {{%user}} / {{%token}}
+            'created_at' => $this->integer()->notNull(),
+            'last_used_at' => $this->integer()->null(),
             'name' => $this->string(128)->null(),
         ]);
+
+        // credential_id is looked up on every (anonymous) login attempt and must be globally unique;
+        // user_id is filtered by the management UI.
+        $this->createIndex('idx-user_entity-credential_id', '{{%user_entity}}', 'credential_id', true);
+        $this->createIndex('idx-user_entity-user_id', '{{%user_entity}}', 'user_id');
 
         $this->addForeignKey(
             'fk_user_entity_user',
