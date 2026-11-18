@@ -69,7 +69,8 @@ class Module extends BaseModule
         'profile.gravatar_email',
         'profile.location',
         'profile.website',
-        'profile.bio'
+        'profile.bio',
+        'profile.phone',
     ];
     /**
      * @var string prefix to be used as a replacement when user requests deletion of his data.

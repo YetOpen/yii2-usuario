@@ -253,7 +253,10 @@ class SettingsController extends Controller
                     'gravatar_email' => $anonymReplacement . "@example.com",
                     'location' => $anonymReplacement,
                     'website' => $anonymReplacement . ".tld",
-                    'bio' => Yii::t('usuario', 'Deleted by GDPR request')
+                    'bio' => Yii::t('usuario', 'Deleted by GDPR request'),
+                    // Cleared, not replaced: an application may identify a user by it, and an
+                    // anonymized account must no longer answer to the number.
+                    'phone' => null,
                     ]
                 );
             }
