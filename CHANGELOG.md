@@ -2,6 +2,7 @@
 
 ## dev
 
+- New: `Profile::$phone`, the user's mobile number in international format (`profile.phone`, indexed, migration `m000000_000012`): set by an administrator only (`Profile::SCENARIO_ADMIN`, the admin profile form), never mass-assignable from the user's own settings, since an application may identify a user by it (mp1509)
 - New: REST endpoint to disable two factor authentication for the logged-in user (`api/v1/SettingsController::two-factor-disable`), gated behind a re-check of the account password and clearing the channel and outstanding recovery codes via `TwoFactorDisableService`; sends the 2FA-disabled notification email (mp1509)
 - Fix: API password reset now consumes the recovery token via `Token::deleteAll()` instead of the AR instance `delete()`, so single-use cleanup is not vetoed by a host app's `EVENT_BEFORE_DELETE` permission guard on the unauthenticated reset request (mp1509)
 - Enh: API password reset returns password validation errors as `422 [{field, message}]` (distinct from the opaque `400` for a bad/expired token), so clients can show why a password was rejected (mp1509)

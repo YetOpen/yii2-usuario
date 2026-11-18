@@ -36,12 +36,24 @@ use yii\web\UploadedFile;
  * @property string $bio
  * @property string $image
  * @property string $timezone
+ * @property string|null $phone the user's mobile number, international format (`+393401234567`)
  * @property User   $user
  */
 class Profile extends ActiveRecord
 {
     use ModuleAwareTrait;
     use ContainerAwareTrait;
+
+    /**
+     * The administrator's edit of a profile (`AdminController::actionUpdateProfile()`): the only
+     * place `phone` can be set. An application may identify a user by that number (e.g. a
+     * messaging integration acting as whoever writes from it), so users must not set it on
+     * themselves — in the default scenario it is not even mass-assignable.
+     */
+    public const SCENARIO_ADMIN = 'admin';
+
+    /** `+`, a country code and the number: 8 to 15 digits in all (E.164). */
+    public const PHONE_PATTERN = '/^\+[1-9]\d{7,14}$/';
 
     /**
      * @var UploadedFile
@@ -113,6 +125,10 @@ class Profile extends ActiveRecord
             'locationLength' => ['location', 'string', 'max' => 255],
             'websiteLength' => ['website', 'string', 'max' => 255],
             'imageSafe' => ['image', 'safe'],
+            'phoneNormalize' => ['phone', 'filter', 'filter' => [static::class, 'normalizePhone'], 'on' => self::SCENARIO_ADMIN],
+            'phoneEmpty' => ['phone', 'default', 'value' => null, 'on' => self::SCENARIO_ADMIN],
+            'phonePattern' => ['phone', 'match', 'pattern' => self::PHONE_PATTERN, 'on' => self::SCENARIO_ADMIN,
+                'message' => Yii::t('usuario', 'The phone number must be in international format, e.g. +393401234567.')],
             'imageFile' => [
                 'imageUpload', 'file',
                 'skipOnEmpty' => true,
@@ -136,6 +152,7 @@ class Profile extends ActiveRecord
             'website' => Yii::t('usuario', 'Website'),
             'bio' => Yii::t('usuario', 'Bio'),
             'timezone' => Yii::t('usuario', 'Time zone'),
+            'phone' => Yii::t('usuario', 'Mobile phone'),
             'image' => Yii::t('usuario', 'Image'),
             'imageUpload' => Yii::t('usuario', 'Profile Image'),
         ];
@@ -217,5 +234,17 @@ class Profile extends ActiveRecord
     public static function find()
     {
         return new ProfileQuery(static::class);
+    }
+
+    /**
+     * The number without spaces, dots, dashes or brackets; an empty value stays empty.
+     *
+     * @param mixed $phone
+     */
+    public static function normalizePhone($phone): ?string
+    {
+        $phone = preg_replace('/[\s.\-()]/', '', (string)$phone);
+
+        return $phone === '' ? null : $phone;
     }
 }

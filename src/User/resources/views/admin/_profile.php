@@ -80,6 +80,7 @@ CSS);
 <?= $form->field($profile, 'public_email') ?>
 <?= $form->field($profile, 'website') ?>
 <?= $form->field($profile, 'location') ?>
+<?= $form->field($profile, 'phone')->textInput(['placeholder' => '+393401234567']) ?>
 <?= $form->field($profile, 'gravatar_email') ?>
 <?= $form->field($profile, 'bio')->textarea() ?>
 

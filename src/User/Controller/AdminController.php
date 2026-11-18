@@ -195,6 +195,8 @@ class AdminController extends Controller
             $profile = $this->make(Profile::class);
             $profile->link('user', $user);
         }
+        // The administrator's edit: the fields only an administrator may set (`phone`) too.
+        $profile->scenario = Profile::SCENARIO_ADMIN;
         /** @var UserEvent $event */
         $event = $this->make(UserEvent::class, [$user]);
 
