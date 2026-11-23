@@ -87,6 +87,22 @@ class LoginForm extends Model
     /**
      * {@inheritdoc}
      *
+     * In the `2fa` scenario (the code step of the login) only the code comes from the
+     * request: login and password are the ones already checked at the first step, set by
+     * the caller from the session, and must not be replaceable by the posted data. They
+     * stay active, so they are still validated.
+     */
+    public function scenarios()
+    {
+        $scenarios = parent::scenarios();
+        $scenarios['2fa'] = ['!login', '!password', '!rememberMe', 'twoFactorAuthenticationCode'];
+
+        return $scenarios;
+    }
+
+    /**
+     * {@inheritdoc}
+     *
      * @throws \Da\TwoFA\Exception\InvalidSecretKeyException (only if package is being used)
      */
     public function rules()
