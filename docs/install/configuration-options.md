@@ -30,6 +30,18 @@ Setting this attribute will allow users to configure their login process with tw
 By default, Google Authenticator App for two-factor authentication cycles in periods of 30 seconds. In order to allow
 a bigger period so to avoid out of sync issues.
 
+#### twoFactorAuthenticationMaxAttempts (type: `integer`, default: `5`)
+
+How many wrong two factor authentication codes a user can enter, at the web login's code step or through the API
+`verify` endpoint, before the code step is locked for that user. The count is kept on the user record (columns
+`auth_tf_failed_attempts` and `auth_tf_last_failed_at`, added by migration `m000000_000012`), so a new session does
+not reset it. Set it to `0` to disable the limit.
+
+#### twoFactorAuthenticationLockoutTime (type: `integer`, default: `300`)
+
+Seconds the code step stays locked after too many wrong codes, counted from the last wrong one. Wrong codes older
+than this are forgotten.
+
 #### twoFactorAuthenticationValidators (type: `array`)
 
 An array of arrays of channels availables for two factor authentication. The keys in the arrays have the following meaning:

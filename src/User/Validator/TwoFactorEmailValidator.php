@@ -52,19 +52,46 @@ class TwoFactorEmailValidator extends TwoFactorCodeValidator
         if (is_null($this->code) || $this->code == '') {
             return false;
         }
-        $emailCodeTime = new \DateTime(Yii::$app->session->get("email_code_time"));
-        $currentTime = new \DateTime('now');
-        $interval = $currentTime->getTimestamp() - $emailCodeTime->getTimestamp();
-
-        $module = Yii::$app->getModule('user');
-        $validators = $module->twoFactorAuthenticationValidators;
-        $codeDurationTime = ArrayHelper::getValue($validators, $this->type.'.codeDurationTime', 300);
-
-        if ($interval > $codeDurationTime) {
+        if (!$this->hasPendingCode()) {
             return false;
         }
-        $emailCode = Yii::$app->session->get("email_code");
-        return $this->code == $emailCode;
+        $emailCode = Yii::$app->session->get(TwoFactorEmailCodeGeneratorService::SESSION_CODE);
+        return hash_equals((string) $emailCode, (string) $this->code);
+    }
+
+    /**
+     * Whether the session holds a code sent by e-mail to this user that has not expired
+     * yet: a code is only valid for the user it was sent to.
+     *
+     * @return bool
+     */
+    public function hasPendingCode()
+    {
+        $session = Yii::$app->session;
+        $codeUserId = $session->get(TwoFactorEmailCodeGeneratorService::SESSION_USER_ID);
+        if ($codeUserId === null
+            || (string) $codeUserId !== (string) $this->user->id
+            || $session->get(TwoFactorEmailCodeGeneratorService::SESSION_CODE) === null
+        ) {
+            return false;
+        }
+        $codeTime = new \DateTime($session->get(TwoFactorEmailCodeGeneratorService::SESSION_CODE_TIME));
+        $interval = (new \DateTime('now'))->getTimestamp() - $codeTime->getTimestamp();
+
+        $validators = Yii::$app->getModule('user')->twoFactorAuthenticationValidators;
+        $codeDurationTime = ArrayHelper::getValue($validators, $this->type.'.codeDurationTime', 300);
+
+        return $interval <= $codeDurationTime;
+    }
+
+    /**
+     * Spends the code sent by e-mail: called once it has been used successfully.
+     */
+    public function clearCode()
+    {
+        Yii::$app->session->remove(TwoFactorEmailCodeGeneratorService::SESSION_CODE);
+        Yii::$app->session->remove(TwoFactorEmailCodeGeneratorService::SESSION_CODE_TIME);
+        Yii::$app->session->remove(TwoFactorEmailCodeGeneratorService::SESSION_USER_ID);
     }
 
     /**

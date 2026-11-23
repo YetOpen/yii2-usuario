@@ -20,6 +20,14 @@ use Yii;
 class TwoFactorEmailCodeGeneratorService implements ServiceInterface
 {
     /**
+     * Session keys holding the last code sent, when it was sent and the id of the user it
+     * was sent to: a code is only valid for that user (see TwoFactorEmailValidator).
+     */
+    const SESSION_CODE = 'email_code';
+    const SESSION_CODE_TIME = 'email_code_time';
+    const SESSION_USER_ID = 'email_code_user_id';
+
+    /**
      * @var User
      */
     protected $user;
@@ -55,8 +63,9 @@ class TwoFactorEmailCodeGeneratorService implements ServiceInterface
             return false;
         }
         // put key in session
-        Yii::$app->session->set("email_code_time", date('Y-m-d H:i:s'));
-        Yii::$app->session->set("email_code", $code);
+        Yii::$app->session->set(self::SESSION_CODE_TIME, date('Y-m-d H:i:s'));
+        Yii::$app->session->set(self::SESSION_CODE, $code);
+        Yii::$app->session->set(self::SESSION_USER_ID, $user->id);
 
         return $code;
     }

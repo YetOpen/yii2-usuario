@@ -76,8 +76,10 @@ class SecurityController extends Controller
                         'roles' => ['?'],
                     ],
                     [
+                        // confirm and recovery-code send a signed-in user home themselves
+                        // (e.g. a stale code form submitted from another tab).
                         'allow' => true,
-                        'actions' => ['login', 'auth', 'logout'],
+                        'actions' => ['login', 'confirm', 'recovery-code', 'auth', 'logout'],
                         'roles' => ['@'],
                     ],
                 ],
@@ -147,7 +149,13 @@ class SecurityController extends Controller
                 $user = $form->getUser();
 
                 if ($user->auth_tf_enabled) {
-                    Yii::$app->session->set('credentials', ['login' => $form->login, 'pwd' => $form->password]);
+                    // A code still pending for this user is kept: the code step reuses it,
+                    // so submitting the password again does not send another e-mail / SMS.
+                    Yii::$app->session->set('credentials', [
+                        'login' => $form->login,
+                        'pwd' => $form->password,
+                        'rememberMe' => (bool) $form->rememberMe,
+                    ]);
                     return $this->redirect(['confirm']);
                 }
             }
@@ -192,6 +200,8 @@ class SecurityController extends Controller
         $form = $this->make(LoginForm::class);
         $form->login = $credentials['login'];
         $form->password = $credentials['pwd'];
+        // "Remember me" was chosen at the first step: the code form does not ask again.
+        $form->rememberMe = !empty($credentials['rememberMe']);
         $form->setScenario('2fa');
 
         /**
@@ -210,6 +220,7 @@ class SecurityController extends Controller
 
             if ($form->login()) {
                 Yii::$app->session->set('credentials', null);
+                $this->clearTwoFactorCode($form->getUser());
 
                 $form->getUser()->updateAttributes(['last_login_at' => time()]);
 
@@ -217,6 +228,7 @@ class SecurityController extends Controller
 
                 return $this->goBack();
             }
+            $this->trigger(FormEvent::EVENT_FAILED_LOGIN, $event);
         } else {
             $module = Yii::$app->getModule('user');
             $validators = $module->twoFactorAuthenticationValidators;
@@ -233,7 +245,11 @@ class SecurityController extends Controller
             $object = $this
                 ->make($class, [$user, null, $this->module->twoFactorAuthenticationCycles]);
 
-            $object->generateCode();
+            // One code per challenge: showing the form again (a reload) must not send
+            // another e-mail / SMS while the one already sent is still valid.
+            if (!method_exists($object, 'hasPendingCode') || !$object->hasPendingCode()) {
+                $object->generateCode();
+            }
         }
 
         return $this->render(
@@ -330,6 +346,23 @@ class SecurityController extends Controller
                 'module' => $this->module,
             ]
         );
+    }
+
+    /**
+     * Spends the e-mail / SMS code pending for the user, once they have signed in with it.
+     *
+     * @param User $user
+     */
+    protected function clearTwoFactorCode(User $user)
+    {
+        $class = ArrayHelper::getValue($this->module->twoFactorAuthenticationValidators, $user->auth_tf_type . '.class');
+        if ($class === null) {
+            return;
+        }
+        $validator = $this->make($class, [$user, null, $this->module->twoFactorAuthenticationCycles]);
+        if (method_exists($validator, 'clearCode')) {
+            $validator->clearCode();
+        }
     }
 
     public function actionLogout()

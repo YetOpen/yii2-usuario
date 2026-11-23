@@ -206,6 +206,8 @@ $module = Yii::$app->getModule('user');
     $uri = Url::to(['two-factor', 'id' => $model->getUser()->id]);
     $verify = Url::to(['two-factor-enable', 'id' => $model->getUser()->id]);
     $mobilePhoneRegistration = Url::to(['two-factor-mobile-phone', 'id' => $model->getUser()->id]);
+    $csrfParam = json_encode(Yii::$app->request->csrfParam);
+    $csrfToken = json_encode(Yii::$app->request->getCsrfToken());
     $recoveryCodesTitle = json_encode(Yii::t('usuario', 'Save your recovery codes'));
     $recoveryCodesWarning = json_encode(Yii::t(
         'usuario',
@@ -242,7 +244,9 @@ $(document)
                 choice = element[i].value;
         }
         
-        $.getJSON('{$verify}', {code: $('#tfcode').val(), choice: choice}, function(data){
+        var data = {code: $('#tfcode').val(), choice: choice};
+        data[{$csrfParam}] = {$csrfToken};
+        $.post('{$verify}', data, function(data){
             btn.prop('disabled', false);
             if(data.success) {
                 $('#enable_tf_btn, #disable_tf_btn').toggleClass('hide');
@@ -270,14 +274,16 @@ $(document)
                 $('input#tfcode').val('');
                 $('#tfmessage').removeClass('alert-info').addClass('alert-danger').find('p').text(data.message);
             }
-        }).fail(function(){ btn.prop('disabled', false); });
+        }, 'json').fail(function(){ btn.prop('disabled', false); });
     })
     .on('click', '.btn-submit-mobile-phone', function(e) {
         e.preventDefault();
         var btn = $(this);
         btn.prop('disabled', true);
 
-        $.getJSON('{$mobilePhoneRegistration}', {mobilephone: $('#mobilephone').val()}, function(data){
+        var data = {mobilephone: $('#mobilephone').val()};
+        data[{$csrfParam}] = {$csrfToken};
+        $.post('{$mobilePhoneRegistration}', data, function(data){
             btn.prop('disabled', false);
             if(data.success) {
                 btn.prop('disabled', true);
@@ -288,7 +294,7 @@ $(document)
                 $('input#phonenumber').val('');
                 $('#tfmessagephone').removeClass('alert-info').addClass('alert-danger').find('p').text(data.message);
             }
-        }).fail(function(){ btn.prop('disabled', false); });
+        }, 'json').fail(function(){ btn.prop('disabled', false); });
        
     })
 JS;
