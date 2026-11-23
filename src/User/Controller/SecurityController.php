@@ -76,8 +76,10 @@ class SecurityController extends Controller
                         'roles' => ['?'],
                     ],
                     [
+                        // confirm and recovery-code send a signed-in user home themselves
+                        // (e.g. a stale code form submitted from another tab).
                         'allow' => true,
-                        'actions' => ['login', 'auth', 'logout'],
+                        'actions' => ['login', 'confirm', 'recovery-code', 'auth', 'logout'],
                         'roles' => ['@'],
                     ],
                 ],

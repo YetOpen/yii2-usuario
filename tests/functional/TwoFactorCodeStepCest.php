@@ -120,6 +120,21 @@ class TwoFactorCodeStepCest
         $I->assertFalse((new TwoFactorEmailValidator($user, $code))->validate());
     }
 
+    public function testSignedInUserIsSentHomeFromTheCodeSteps(FunctionalTester $I)
+    {
+        $I->amLoggedInAs($I->grabFixture('user', 'user'));
+
+        foreach (['/user/security/confirm', '/user/security/recovery-code'] as $route) {
+            $I->amOnRoute($route);
+            $I->seeResponseCodeIs(200);
+            $I->dontSee('Forbidden');
+            $I->see('Logout');
+        }
+
+        $I->sendAjaxPostRequest(Url::to(['/user/security/confirm']), ['LoginForm' => ['twoFactorAuthenticationCode' => '000000']]);
+        $I->dontSeeResponseCodeIs(403);
+    }
+
     private function enableEmailTwoFactor(User $user)
     {
         $user->updateAttributes(['auth_tf_enabled' => true, 'auth_tf_type' => 'email']);
