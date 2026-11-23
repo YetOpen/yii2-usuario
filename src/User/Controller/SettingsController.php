@@ -522,6 +522,9 @@ class SettingsController extends Controller
         // persisted, so this is the only response that will ever contain them.
         $recoveryCodes = null;
         if ($success) {
+            if (method_exists($object, 'clearCode')) {
+                $object->clearCode();
+            }
             $recoveryCodes = $this->make(RecoveryCodeGeneratorService::class, [$user])->run();
         }
 

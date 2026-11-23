@@ -53,6 +53,15 @@ class TwoFactorCodeValidator implements ValidatorInterface
     }
 
     /**
+     * Spends the code once it has been used successfully. Nothing to do for an
+     * authenticator app (TOTP) code; validators whose code is stored on the server side
+     * (e-mail, SMS) override this to remove it.
+     */
+    public function clearCode()
+    {
+    }
+
+    /**
      * @return bool
      *
      */

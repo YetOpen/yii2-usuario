@@ -210,6 +210,7 @@ class SecurityController extends Controller
 
             if ($form->login()) {
                 Yii::$app->session->set('credentials', null);
+                $this->clearTwoFactorCode($form->getUser());
 
                 $form->getUser()->updateAttributes(['last_login_at' => time()]);
 
@@ -330,6 +331,24 @@ class SecurityController extends Controller
                 'module' => $this->module,
             ]
         );
+    }
+
+    /**
+     * Spends the e-mail / SMS code the user has just signed in with, so it cannot be used
+     * a second time in this session.
+     *
+     * @param User $user
+     */
+    protected function clearTwoFactorCode(User $user)
+    {
+        $class = ArrayHelper::getValue($this->module->twoFactorAuthenticationValidators, $user->auth_tf_type . '.class');
+        if ($class === null) {
+            return;
+        }
+        $validator = $this->make($class, [$user, null, $this->module->twoFactorAuthenticationCycles]);
+        if (method_exists($validator, 'clearCode')) {
+            $validator->clearCode();
+        }
     }
 
     public function actionLogout()

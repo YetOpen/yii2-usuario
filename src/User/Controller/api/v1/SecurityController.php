@@ -138,6 +138,9 @@ class SecurityController extends Controller
             $codeDurationTime = \yii\helpers\ArrayHelper::getValue($validators, $type . '.codeDurationTime', 300);
             throw new UnauthorizedHttpException($validator->getUnsuccessLoginMessage($codeDurationTime));
         }
+        if (method_exists($validator, 'clearCode')) {
+            $validator->clearCode();
+        }
 
         $user->updateAttributes([
             'last_login_at' => time(),

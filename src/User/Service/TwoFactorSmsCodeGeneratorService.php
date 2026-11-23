@@ -23,6 +23,14 @@ use yii\helpers\ArrayHelper;
 class TwoFactorSmsCodeGeneratorService implements ServiceInterface
 {
     /**
+     * Session keys holding the last code sent, when it was sent and the id of the user it
+     * was sent to: a code is only valid for that user (see TwoFactorTextMessageValidator).
+     */
+    const SESSION_CODE = 'sms_code';
+    const SESSION_CODE_TIME = 'sms_code_time';
+    const SESSION_USER_ID = 'sms_code_user_id';
+
+    /**
      * @var User
      */
     protected $user;
@@ -71,8 +79,9 @@ class TwoFactorSmsCodeGeneratorService implements ServiceInterface
         $success = $this->smsSender->send($mobilePhone, $code);
         if ($success) {
             // put key in session
-            Yii::$app->session->set("sms_code_time", date('Y-m-d H:i:s'));
-            Yii::$app->session->set("sms_code", $code);
+            Yii::$app->session->set(self::SESSION_CODE_TIME, date('Y-m-d H:i:s'));
+            Yii::$app->session->set(self::SESSION_CODE, $code);
+            Yii::$app->session->set(self::SESSION_USER_ID, $user->id);
         } else {
             Yii::$app->session->addFlash('error', Yii::t('usuario', 'The sms sending failed, please check your configuration.'));
             return false;

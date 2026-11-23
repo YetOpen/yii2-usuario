@@ -2,12 +2,18 @@
 
 use Da\User\Form\LoginForm;
 use Da\User\Model\User;
+use Da\User\Service\TwoFactorEmailCodeGeneratorService;
+use Da\User\Service\TwoFactorSmsCodeGeneratorService;
+use Da\User\Validator\TwoFactorEmailValidator;
+use Da\User\Validator\TwoFactorTextMessageValidator;
 use tests\_fixtures\UserFixture;
+use yetopen\smssender\SmsSenderInterface;
 use yii\helpers\Url;
 
 /**
  * The web login's code step (security/confirm) must only accept the second factor of the
- * user whose credentials were checked at the first step.
+ * user whose credentials were checked at the first step, and an e-mail / SMS code must only
+ * be usable by the user it was generated for.
  */
 class TwoFactorCodeStepCest
 {
@@ -76,6 +82,45 @@ class TwoFactorCodeStepCest
         $I->assertContains('password', $form->activeAttributes());
     }
 
+    public function testEmailCodeIsBoundToItsUser(FunctionalTester $I)
+    {
+        $owner = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
+        $other = $this->enableEmailTwoFactor($I->grabFixture('user', 'seconduser'));
+
+        $code = Yii::$container->get(TwoFactorEmailCodeGeneratorService::class, [$owner])->run();
+
+        $I->assertFalse((new TwoFactorEmailValidator($other, $code))->validate());
+        $I->assertTrue((new TwoFactorEmailValidator($owner, $code))->validate());
+    }
+
+    public function testSmsCodeIsBoundToItsUser(FunctionalTester $I)
+    {
+        $sender = $this->useFakeSmsSender();
+        $owner = $I->grabFixture('user', 'user');
+        $owner->updateAttributes(['auth_tf_mobile_phone' => '+390000000001']);
+        $other = $I->grabFixture('user', 'seconduser');
+        $other->updateAttributes(['auth_tf_mobile_phone' => '+390000000002']);
+
+        $I->assertTrue(Yii::$container->get(TwoFactorSmsCodeGeneratorService::class, [$owner])->run());
+        $code = $sender->lastMessage;
+
+        $I->assertFalse((new TwoFactorTextMessageValidator($other, $code))->validate());
+        $I->assertTrue((new TwoFactorTextMessageValidator($owner, $code))->validate());
+    }
+
+    public function testEmailCodeCannotBeReusedAfterLogin(FunctionalTester $I)
+    {
+        $user = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
+
+        $this->submitCredentials($I, $user->email);
+        $code = $this->grabLastEmailedCode($I);
+        $I->submitForm('#LoginForm', ['LoginForm[twoFactorAuthenticationCode]' => $code]);
+        $I->assertEquals($user->id, Yii::$app->user->id);
+
+        $I->expectTo('find the code spent once the login succeeded');
+        $I->assertFalse((new TwoFactorEmailValidator($user, $code))->validate());
+    }
+
     private function enableEmailTwoFactor(User $user)
     {
         $user->updateAttributes(['auth_tf_enabled' => true, 'auth_tf_type' => 'email']);
@@ -97,5 +142,35 @@ class TwoFactorCodeStepCest
         $I->assertSame(1, preg_match('/<b>(\d{6})<\/b>/', $body, $matches), 'No code found in the e-mail');
 
         return $matches[1];
+    }
+
+    private function useFakeSmsSender()
+    {
+        $sender = new class extends \yii\base\Component implements SmsSenderInterface {
+            public $lastMessage;
+
+            public function getMinTextLength()
+            {
+                return 1;
+            }
+
+            public function getMaxTextLength()
+            {
+                return 160;
+            }
+
+            public function send($number, $message, $sender = null, $prefix = null, $delivery_time = null)
+            {
+                $this->lastMessage = $message;
+
+                return true;
+            }
+        };
+        $module = Yii::$app->getModule('user');
+        $validators = $module->twoFactorAuthenticationValidators;
+        $validators['sms']['smsSender'] = $sender;
+        $module->twoFactorAuthenticationValidators = $validators;
+
+        return $sender;
     }
 }

@@ -88,6 +88,9 @@ class SettingsController extends Controller
 
         $recoveryCodes = null;
         if ($success) {
+            if (method_exists($object, 'clearCode')) {
+                $object->clearCode();
+            }
             $user->updateAttributes([
                 'auth_tf_enabled' => '1',
                 'auth_tf_type' => $choice

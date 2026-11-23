@@ -53,7 +53,12 @@ class TwoFactorTextMessageValidator extends TwoFactorCodeValidator
         if (is_null($this->code) || $this->code == '') {
             return false;
         }
-        $smsCodeTime = new \DateTime(Yii::$app->session->get("sms_code_time"));
+        // The code in the session is only valid for the user it was sent to.
+        $codeUserId = Yii::$app->session->get(TwoFactorSmsCodeGeneratorService::SESSION_USER_ID);
+        if ($codeUserId === null || (string) $codeUserId !== (string) $this->user->id) {
+            return false;
+        }
+        $smsCodeTime = new \DateTime(Yii::$app->session->get(TwoFactorSmsCodeGeneratorService::SESSION_CODE_TIME));
         $currentTime = new \DateTime('now');
         $interval = $currentTime->getTimestamp() - $smsCodeTime->getTimestamp();
         $module = Yii::$app->getModule('user');
@@ -63,8 +68,18 @@ class TwoFactorTextMessageValidator extends TwoFactorCodeValidator
         if ($interval > $codeDurationTime) {
             return false;
         }
-        $smsCode = Yii::$app->session->get("sms_code");
-        return $this->code == $smsCode;
+        $smsCode = Yii::$app->session->get(TwoFactorSmsCodeGeneratorService::SESSION_CODE);
+        return $smsCode !== null && hash_equals((string) $smsCode, (string) $this->code);
+    }
+
+    /**
+     * Spends the code sent by SMS: called once it has been used successfully.
+     */
+    public function clearCode()
+    {
+        Yii::$app->session->remove(TwoFactorSmsCodeGeneratorService::SESSION_CODE);
+        Yii::$app->session->remove(TwoFactorSmsCodeGeneratorService::SESSION_CODE_TIME);
+        Yii::$app->session->remove(TwoFactorSmsCodeGeneratorService::SESSION_USER_ID);
     }
 
     /**
