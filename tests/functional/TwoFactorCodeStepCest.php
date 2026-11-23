@@ -146,20 +146,21 @@ class TwoFactorCodeStepCest
         $I->assertCount(2, $I->grabSentEmails());
     }
 
-    public function testANewLoginStartsANewChallenge(FunctionalTester $I)
+    public function testRepeatingTheLoginDoesNotSendAnotherCode(FunctionalTester $I)
     {
         $user = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
 
         $this->submitCredentials($I, $user->email);
-        $oldCode = $this->grabLastEmailedCode($I);
-        $this->submitCredentials($I, $user->email);
-        $newCode = $this->grabLastEmailedCode($I);
+        $code = $this->grabLastEmailedCode($I);
 
-        $I->assertCount(2, $I->grabSentEmails());
-        if ($oldCode !== $newCode) {
-            $I->assertFalse((new TwoFactorEmailValidator($user, $oldCode))->validate());
-        }
-        $I->assertTrue((new TwoFactorEmailValidator($user, $newCode))->validate());
+        $I->amGoingTo('submit the password again and again, as a flood would');
+        $this->submitCredentials($I, $user->email);
+        $this->submitCredentials($I, $user->email);
+
+        $I->expectTo('have received a single e-mail, whose code still works');
+        $I->assertCount(1, $I->grabSentEmails());
+        $I->submitForm('#LoginForm', ['LoginForm[twoFactorAuthenticationCode]' => $code]);
+        $I->assertEquals($user->id, Yii::$app->user->id);
     }
 
     public function testSignedInUserIsSentHomeFromTheCodeSteps(FunctionalTester $I)
