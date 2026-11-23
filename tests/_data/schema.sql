@@ -73,6 +73,8 @@ CREATE TABLE `user` (
   `auth_tf_enabled` tinyint(1) DEFAULT '0',
   `auth_tf_type` varchar(20) DEFAULT NULL,
   `auth_tf_mobile_phone` varchar(20) DEFAULT NULL,
+  `auth_tf_failed_attempts` int(11) NOT NULL DEFAULT '0',
+  `auth_tf_last_failed_at` int(11) DEFAULT NULL,
   `flags` int(11) NOT NULL DEFAULT '0',
   `last_login_at` int(11) DEFAULT NULL,
   `gdpr_consent` tinyint(1) NULL DEFAULT '0',

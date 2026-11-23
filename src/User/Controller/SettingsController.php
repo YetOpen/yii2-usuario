@@ -45,6 +45,7 @@ use yii\base\InvalidParamException;
 use yii\filters\AccessControl;
 use yii\filters\VerbFilter;
 use yii\helpers\ArrayHelper;
+use yii\web\BadRequestHttpException;
 use yii\web\Controller;
 use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
@@ -100,6 +101,8 @@ class SettingsController extends Controller
                     'disconnect' => ['post'],
                     'delete' => ['post'],
                     'two-factor-disable' => ['post'],
+                    'two-factor-enable' => ['post'],
+                    'two-factor-mobile-phone' => ['post'],
                     'terminate-sessions' => ['post'],
                 ],
             ],
@@ -497,6 +500,10 @@ class SettingsController extends Controller
             throw new ForbiddenHttpException(Yii::t('usuario', 'Application not configured for two factor authentication.'));
         }
 
+        if ($id != Yii::$app->user->id) {
+            throw new ForbiddenHttpException();
+        }
+
         Yii::$app->response->format = Response::FORMAT_JSON;
 
         /** @var User $user */
@@ -508,12 +515,15 @@ class SettingsController extends Controller
                 'message' => Yii::t('usuario', 'User not found.')
             ];
         }
-        $code = Yii::$app->request->get('code');
+        $code = Yii::$app->request->post('code');
         $module = Yii::$app->getModule('user');
         $validators = $module->twoFactorAuthenticationValidators;
-        $choice = Yii::$app->request->get('choice');
+        $choice = Yii::$app->request->post('choice');
         $codeDurationTime = ArrayHelper::getValue($validators, $choice.'.codeDurationTime', 300);
         $class = ArrayHelper::getValue($validators, $choice.'.class');
+        if ($class === null) {
+            throw new BadRequestHttpException(Yii::t('usuario', 'Invalid 2FA choice'));
+        }
 
         $object = $this
             ->make($class, [$user, $code, $this->module->twoFactorAuthenticationCycles]);
@@ -525,6 +535,9 @@ class SettingsController extends Controller
         // persisted, so this is the only response that will ever contain them.
         $recoveryCodes = null;
         if ($success) {
+            if (method_exists($object, 'clearCode')) {
+                $object->clearCode();
+            }
             $recoveryCodes = $this->make(RecoveryCodeGeneratorService::class, [$user])->run();
         }
 
@@ -595,6 +608,10 @@ class SettingsController extends Controller
 
     public function actionTwoFactorMobilePhone($id)
     {
+        if ($id != Yii::$app->user->id) {
+            throw new ForbiddenHttpException();
+        }
+
         Yii::$app->response->format = Response::FORMAT_JSON;
 
         /**
@@ -610,10 +627,15 @@ class SettingsController extends Controller
                 'message' => Yii::t('usuario', 'User not found.')
             ];
         }
-        $mobilePhone = Yii::$app->request->get('mobilephone');
+        $mobilePhone = Yii::$app->request->post('mobilephone');
         $currentMobilePhone = $user->getAuthTfMobilePhone();
         $success = false;
-        if ($currentMobilePhone == $mobilePhone) {
+        if ($user->auth_tf_enabled) {
+            // The number can only be set while enabling 2FA, where a code sent to it must be
+            // entered: changing it under an active 2FA would move the login SMS codes to a
+            // number nobody has proven to own.
+            $success = false;
+        } elseif ($currentMobilePhone == $mobilePhone) {
             $success = true;
         } else {
             $success = $user->updateAttributes(['auth_tf_mobile_phone' => $mobilePhone]);

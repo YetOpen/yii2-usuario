@@ -46,6 +46,8 @@ use yii\web\IdentityInterface;
  * @property int                    $auth_tf_enabled
  * @property string                 $auth_tf_type
  * @property string                 $auth_tf_mobile_phone
+ * @property int                    $auth_tf_failed_attempts
+ * @property int                    $auth_tf_last_failed_at
  * @property string                 $registration_ip
  * @property int                    $confirmed_at
  * @property int                    $blocked_at

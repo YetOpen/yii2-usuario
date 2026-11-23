@@ -112,6 +112,17 @@ class Module extends BaseModule
      */
     public $twoFactorAuthenticationCycles = 1;
     /**
+     * @var int wrong two factor authentication codes a user can enter (web login code step
+     *          or API verify) before the code step is locked for them; 0 disables the limit
+     * @see \Da\User\Service\TwoFactorAttemptLimiter
+     */
+    public $twoFactorAuthenticationMaxAttempts = 5;
+    /**
+     * @var int seconds the code step stays locked after too many wrong codes, counted from
+     *          the last one; also how long wrong codes are remembered
+     */
+    public $twoFactorAuthenticationLockoutTime = 300;
+    /**
      * @var bool whether to allow auto login or not
      */
     public $enableAutoLogin = true;

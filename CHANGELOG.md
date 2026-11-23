@@ -3,6 +3,26 @@
 ## dev
 
 - New: `Profile::$phone`, the user's mobile number in international format (`profile.phone`, indexed, migration `m000000_000012`): set by an administrator only (`Profile::SCENARIO_ADMIN`, the admin profile form), never mass-assignable from the user's own settings, since an application may identify a user by it (mp1509)
+
+## 1.7.0 Nov 23rd, 2026
+
+**Upgrading**: run the migrations, three are new in this release:
+`m000000_000011_add_image_column_to_profile_table`,
+`m000000_000011_create_auth_tf_recovery_code_table` and
+`m000000_000012_add_auth_tf_failed_attempts_columns_to_user_table`.
+Applications overriding the `settings/account` view must now call
+`settings/two-factor-enable` and `settings/two-factor-mobile-phone` as POST
+requests carrying the CSRF token.
+
+- Fix: two factor authentication codes can no longer be guessed without limit: after `twoFactorAuthenticationMaxAttempts` (default 5) wrong codes, at the web login's code step (ajax validation included) or at the API `verify` endpoint (`429`), no code is checked for that user until `twoFactorAuthenticationLockoutTime` (default 300) seconds have passed since the last wrong one. The count is kept on the user record (new migration `m000000_000012_add_auth_tf_failed_attempts_columns_to_user_table`), not in the session, and a wrong code at the web code step now triggers `FormEvent::EVENT_FAILED_LOGIN`
+- Fix: "Remember me" chosen at the first step of a login with 2FA is kept at the code step, instead of being lost
+- Fix: `settings/two-factor-mobile-phone` and `settings/two-factor-enable` only accept POST (CSRF-checked) and read their parameters from the body: a cross-site GET (a link, an `<img>`) could change a signed-in user's 2FA mobile phone. The number can no longer be changed while 2FA is enabled, so the login SMS codes cannot be moved to an unverified number. Views overriding `settings/account` must send these requests as POST with the CSRF token
+- Fix: the web login's code step sends one e-mail / SMS code per challenge instead of one per page load: a reload reuses the code still pending (`hasPendingCode()`), a new one is sent only once it expires, also when the password is submitted again, so whoever holds the password can no longer flood the user's inbox or phone by reloading the page or repeating the login
+- Fix: a signed-in user reaching `security/confirm` or `security/recovery-code` (e.g. submitting a stale code form from another tab) is sent home instead of getting a 403: the access rules now let them in, so the actions' own signed-in guard applies
+- Fix: `settings/two-factor-enable` and `settings/two-factor-mobile-phone` now refuse (403) an `id` other than the signed-in user's, like `two-factor` and `two-factor-disable` already did: any signed-in user could set another account's 2FA mobile phone (receiving its SMS codes) or enable 2FA on it
+- Fix: an e-mail / SMS 2FA code is bound to the user it was sent to (`*_code_user_id` in the session, checked by `TwoFactorEmailValidator` / `TwoFactorTextMessageValidator`), compared with `hash_equals()` and spent once used (`clearCode()`) at login and when enabling 2FA, so a code received for one account can no longer sign in another
+- Fix: the 2FA code step of the web login (`security/confirm`) no longer loads `login`, `password` or `rememberMe` from the request: in the `2fa` scenario of `LoginForm` only the code is safe, so a user at the code step cannot swap in another account's credentials
+- New: recovery-code login for two factor authentication on the web login (`security/recovery-code`, linked from the code step): a valid unused recovery code disables 2FA via `TwoFactorDisableService`; enabling 2FA from the web settings now generates and shows the recovery codes once, like the API; disabling 2FA with a recovery code (web or API) sends the user a 2FA-disabled notification email
 - New: REST endpoint to disable two factor authentication for the logged-in user (`api/v1/SettingsController::two-factor-disable`), gated behind a re-check of the account password and clearing the channel and outstanding recovery codes via `TwoFactorDisableService`; sends the 2FA-disabled notification email (mp1509)
 - Fix: API password reset now consumes the recovery token via `Token::deleteAll()` instead of the AR instance `delete()`, so single-use cleanup is not vetoed by a host app's `EVENT_BEFORE_DELETE` permission guard on the unauthenticated reset request (mp1509)
 - Enh: API password reset returns password validation errors as `422 [{field, message}]` (distinct from the opaque `400` for a bad/expired token), so clients can show why a password was rejected (mp1509)

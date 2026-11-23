@@ -15,6 +15,7 @@ use Da\User\Event\FormEvent;
 use Da\User\Factory\MailFactory;
 use Da\User\Form\LoginForm;
 use Da\User\Model\AuthTfRecoveryCode;
+use Da\User\Service\TwoFactorAttemptLimiter;
 use Da\User\Service\TwoFactorDisableService;
 use Da\User\Traits\ContainerAwareTrait;
 use Da\User\Traits\ModuleAwareTrait;
@@ -22,6 +23,7 @@ use Yii;
 use yii\filters\auth\CompositeAuth;
 use yii\rest\Controller;
 use yii\web\Cookie;
+use yii\web\TooManyRequestsHttpException;
 use yii\web\UnauthorizedHttpException;
 
 class SecurityController extends Controller
@@ -132,11 +134,25 @@ class SecurityController extends Controller
             throw new \yii\web\ServerErrorHttpException('2FA validator not configured properly.');
         }
 
+        /** @var TwoFactorAttemptLimiter $limiter */
+        $limiter = $this->make(TwoFactorAttemptLimiter::class, [$user]);
+        if (!$limiter->beginAttempt()) {
+            throw new TooManyRequestsHttpException(Yii::t(
+                'usuario',
+                'Too many wrong codes. Please try again in {0} seconds.',
+                [$limiter->getRemainingLockoutTime()]
+            ));
+        }
+
         $validator = $this->make($class, [$user, $code, $this->module->twoFactorAuthenticationCycles]);
 
         if (!$validator->validate()) {
             $codeDurationTime = \yii\helpers\ArrayHelper::getValue($validators, $type . '.codeDurationTime', 300);
             throw new UnauthorizedHttpException($validator->getUnsuccessLoginMessage($codeDurationTime));
+        }
+        $limiter->reset();
+        if (method_exists($validator, 'clearCode')) {
+            $validator->clearCode();
         }
 
         $user->updateAttributes([
