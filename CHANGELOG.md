@@ -2,6 +2,7 @@
 
 ## dev
 
+- Fix: the web login's code step sends one e-mail / SMS code per challenge instead of one per page load: a reload reuses the code still pending (`hasPendingCode()`), a new one is sent once it expires or when a new login starts a new challenge, so whoever holds the password can no longer flood the user's inbox or phone by reloading the page
 - Fix: a signed-in user reaching `security/confirm` or `security/recovery-code` (e.g. submitting a stale code form from another tab) is sent home instead of getting a 403: the access rules now let them in, so the actions' own signed-in guard applies
 - Fix: `settings/two-factor-enable` and `settings/two-factor-mobile-phone` now refuse (403) an `id` other than the signed-in user's, like `two-factor` and `two-factor-disable` already did: any signed-in user could set another account's 2FA mobile phone (receiving its SMS codes) or enable 2FA on it
 - Fix: an e-mail / SMS 2FA code is bound to the user it was sent to (`*_code_user_id` in the session, checked by `TwoFactorEmailValidator` / `TwoFactorTextMessageValidator`), compared with `hash_equals()` and spent once used (`clearCode()`) at login and when enabling 2FA, so a code received for one account can no longer sign in another

@@ -120,6 +120,48 @@ class TwoFactorCodeStepCest
         $I->assertFalse((new TwoFactorEmailValidator($user, $code))->validate());
     }
 
+    public function testReloadingTheCodeStepDoesNotSendAnotherCode(FunctionalTester $I)
+    {
+        $user = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
+
+        $this->submitCredentials($I, $user->email);
+        $code = $this->grabLastEmailedCode($I);
+        $I->amOnRoute('/user/security/confirm');
+        $I->amOnRoute('/user/security/confirm');
+
+        $I->expectTo('have received a single e-mail, whose code still works');
+        $I->assertCount(1, $I->grabSentEmails());
+        $I->submitForm('#LoginForm', ['LoginForm[twoFactorAuthenticationCode]' => $code]);
+        $I->assertEquals($user->id, Yii::$app->user->id);
+    }
+
+    public function testCodeStepSendsANewCodeOnceTheOldOneExpired(FunctionalTester $I)
+    {
+        $user = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
+
+        $this->submitCredentials($I, $user->email);
+        Yii::$app->session->set(TwoFactorEmailCodeGeneratorService::SESSION_CODE_TIME, date('Y-m-d H:i:s', time() - 301));
+        $I->amOnRoute('/user/security/confirm');
+
+        $I->assertCount(2, $I->grabSentEmails());
+    }
+
+    public function testANewLoginStartsANewChallenge(FunctionalTester $I)
+    {
+        $user = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
+
+        $this->submitCredentials($I, $user->email);
+        $oldCode = $this->grabLastEmailedCode($I);
+        $this->submitCredentials($I, $user->email);
+        $newCode = $this->grabLastEmailedCode($I);
+
+        $I->assertCount(2, $I->grabSentEmails());
+        if ($oldCode !== $newCode) {
+            $I->assertFalse((new TwoFactorEmailValidator($user, $oldCode))->validate());
+        }
+        $I->assertTrue((new TwoFactorEmailValidator($user, $newCode))->validate());
+    }
+
     public function testSignedInUserIsSentHomeFromTheCodeSteps(FunctionalTester $I)
     {
         $I->amLoggedInAs($I->grabFixture('user', 'user'));

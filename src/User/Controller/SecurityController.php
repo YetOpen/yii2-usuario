@@ -149,6 +149,9 @@ class SecurityController extends Controller
                 $user = $form->getUser();
 
                 if ($user->auth_tf_enabled) {
+                    // A new challenge: drop any code still pending from a previous one, so
+                    // the code step sends a fresh one.
+                    $this->clearTwoFactorCode($user);
                     Yii::$app->session->set('credentials', ['login' => $form->login, 'pwd' => $form->password]);
                     return $this->redirect(['confirm']);
                 }
@@ -236,7 +239,11 @@ class SecurityController extends Controller
             $object = $this
                 ->make($class, [$user, null, $this->module->twoFactorAuthenticationCycles]);
 
-            $object->generateCode();
+            // One code per challenge: showing the form again (a reload) must not send
+            // another e-mail / SMS while the one already sent is still valid.
+            if (!method_exists($object, 'hasPendingCode') || !$object->hasPendingCode()) {
+                $object->generateCode();
+            }
         }
 
         return $this->render(
@@ -336,8 +343,8 @@ class SecurityController extends Controller
     }
 
     /**
-     * Spends the e-mail / SMS code the user has just signed in with, so it cannot be used
-     * a second time in this session.
+     * Spends the e-mail / SMS code pending for the user: once they have signed in with it,
+     * or when a new challenge starts.
      *
      * @param User $user
      */

@@ -62,6 +62,18 @@ class TwoFactorCodeValidator implements ValidatorInterface
     }
 
     /**
+     * Whether a code already sent to the user is still waiting to be used, so that showing
+     * the code step again does not send another one. Always false for an authenticator
+     * app (TOTP), which has nothing to send.
+     *
+     * @return bool
+     */
+    public function hasPendingCode()
+    {
+        return false;
+    }
+
+    /**
      * @return bool
      *
      */

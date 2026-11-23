@@ -53,23 +53,36 @@ class TwoFactorTextMessageValidator extends TwoFactorCodeValidator
         if (is_null($this->code) || $this->code == '') {
             return false;
         }
-        // The code in the session is only valid for the user it was sent to.
-        $codeUserId = Yii::$app->session->get(TwoFactorSmsCodeGeneratorService::SESSION_USER_ID);
-        if ($codeUserId === null || (string) $codeUserId !== (string) $this->user->id) {
-            return false;
-        }
-        $smsCodeTime = new \DateTime(Yii::$app->session->get(TwoFactorSmsCodeGeneratorService::SESSION_CODE_TIME));
-        $currentTime = new \DateTime('now');
-        $interval = $currentTime->getTimestamp() - $smsCodeTime->getTimestamp();
-        $module = Yii::$app->getModule('user');
-        $validators = $module->twoFactorAuthenticationValidators;
-        $codeDurationTime = ArrayHelper::getValue($validators, $this->type.'.codeDurationTime', 300);
-
-        if ($interval > $codeDurationTime) {
+        if (!$this->hasPendingCode()) {
             return false;
         }
         $smsCode = Yii::$app->session->get(TwoFactorSmsCodeGeneratorService::SESSION_CODE);
-        return $smsCode !== null && hash_equals((string) $smsCode, (string) $this->code);
+        return hash_equals((string) $smsCode, (string) $this->code);
+    }
+
+    /**
+     * Whether the session holds a code sent by SMS to this user that has not expired
+     * yet: a code is only valid for the user it was sent to.
+     *
+     * @return bool
+     */
+    public function hasPendingCode()
+    {
+        $session = Yii::$app->session;
+        $codeUserId = $session->get(TwoFactorSmsCodeGeneratorService::SESSION_USER_ID);
+        if ($codeUserId === null
+            || (string) $codeUserId !== (string) $this->user->id
+            || $session->get(TwoFactorSmsCodeGeneratorService::SESSION_CODE) === null
+        ) {
+            return false;
+        }
+        $codeTime = new \DateTime($session->get(TwoFactorSmsCodeGeneratorService::SESSION_CODE_TIME));
+        $interval = (new \DateTime('now'))->getTimestamp() - $codeTime->getTimestamp();
+
+        $validators = Yii::$app->getModule('user')->twoFactorAuthenticationValidators;
+        $codeDurationTime = ArrayHelper::getValue($validators, $this->type.'.codeDurationTime', 300);
+
+        return $interval <= $codeDurationTime;
     }
 
     /**
