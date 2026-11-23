@@ -7,7 +7,6 @@ use Da\User\Service\TwoFactorSmsCodeGeneratorService;
 use Da\User\Validator\TwoFactorEmailValidator;
 use Da\User\Validator\TwoFactorTextMessageValidator;
 use tests\_fixtures\UserFixture;
-use yetopen\smssender\SmsSenderInterface;
 use yii\helpers\Url;
 
 /**
@@ -95,7 +94,7 @@ class TwoFactorCodeStepCest
 
     public function testSmsCodeIsBoundToItsUser(FunctionalTester $I)
     {
-        $sender = $this->useFakeSmsSender();
+        $sender = FakeSmsSender::install();
         $owner = $I->grabFixture('user', 'user');
         $owner->updateAttributes(['auth_tf_mobile_phone' => '+390000000001']);
         $other = $I->grabFixture('user', 'seconduser');
@@ -142,35 +141,5 @@ class TwoFactorCodeStepCest
         $I->assertSame(1, preg_match('/<b>(\d{6})<\/b>/', $body, $matches), 'No code found in the e-mail');
 
         return $matches[1];
-    }
-
-    private function useFakeSmsSender()
-    {
-        $sender = new class extends \yii\base\Component implements SmsSenderInterface {
-            public $lastMessage;
-
-            public function getMinTextLength()
-            {
-                return 1;
-            }
-
-            public function getMaxTextLength()
-            {
-                return 160;
-            }
-
-            public function send($number, $message, $sender = null, $prefix = null, $delivery_time = null)
-            {
-                $this->lastMessage = $message;
-
-                return true;
-            }
-        };
-        $module = Yii::$app->getModule('user');
-        $validators = $module->twoFactorAuthenticationValidators;
-        $validators['sms']['smsSender'] = $sender;
-        $module->twoFactorAuthenticationValidators = $validators;
-
-        return $sender;
     }
 }

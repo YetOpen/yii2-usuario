@@ -2,6 +2,7 @@
 
 ## dev
 
+- Fix: `settings/two-factor-enable` and `settings/two-factor-mobile-phone` now refuse (403) an `id` other than the signed-in user's, like `two-factor` and `two-factor-disable` already did: any signed-in user could set another account's 2FA mobile phone (receiving its SMS codes) or enable 2FA on it
 - Fix: an e-mail / SMS 2FA code is bound to the user it was sent to (`*_code_user_id` in the session, checked by `TwoFactorEmailValidator` / `TwoFactorTextMessageValidator`), compared with `hash_equals()` and spent once used (`clearCode()`) at login and when enabling 2FA, so a code received for one account can no longer sign in another
 - Fix: the 2FA code step of the web login (`security/confirm`) no longer loads `login`, `password` or `rememberMe` from the request: in the `2fa` scenario of `LoginForm` only the code is safe, so a user at the code step cannot swap in another account's credentials
 - New: REST endpoint to disable two factor authentication for the logged-in user (`api/v1/SettingsController::two-factor-disable`), gated behind a re-check of the account password and clearing the channel and outstanding recovery codes via `TwoFactorDisableService`; sends the 2FA-disabled notification email (mp1509)

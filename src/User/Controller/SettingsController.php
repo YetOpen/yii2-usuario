@@ -494,6 +494,10 @@ class SettingsController extends Controller
             throw new ForbiddenHttpException(Yii::t('usuario', 'Application not configured for two factor authentication.'));
         }
 
+        if ($id != Yii::$app->user->id) {
+            throw new ForbiddenHttpException();
+        }
+
         Yii::$app->response->format = Response::FORMAT_JSON;
 
         /** @var User $user */
@@ -595,6 +599,10 @@ class SettingsController extends Controller
 
     public function actionTwoFactorMobilePhone($id)
     {
+        if ($id != Yii::$app->user->id) {
+            throw new ForbiddenHttpException();
+        }
+
         Yii::$app->response->format = Response::FORMAT_JSON;
 
         /**
