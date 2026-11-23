@@ -2,6 +2,7 @@
 
 ## dev
 
+- Fix: `settings/two-factor-mobile-phone` and `settings/two-factor-enable` only accept POST (CSRF-checked) and read their parameters from the body: a cross-site GET (a link, an `<img>`) could change a signed-in user's 2FA mobile phone. The number can no longer be changed while 2FA is enabled, so the login SMS codes cannot be moved to an unverified number. Views overriding `settings/account` must send these requests as POST with the CSRF token
 - Fix: the web login's code step sends one e-mail / SMS code per challenge instead of one per page load: a reload reuses the code still pending (`hasPendingCode()`), a new one is sent only once it expires, also when the password is submitted again, so whoever holds the password can no longer flood the user's inbox or phone by reloading the page or repeating the login
 - Fix: a signed-in user reaching `security/confirm` or `security/recovery-code` (e.g. submitting a stale code form from another tab) is sent home instead of getting a 403: the access rules now let them in, so the actions' own signed-in guard applies
 - Fix: `settings/two-factor-enable` and `settings/two-factor-mobile-phone` now refuse (403) an `id` other than the signed-in user's, like `two-factor` and `two-factor-disable` already did: any signed-in user could set another account's 2FA mobile phone (receiving its SMS codes) or enable 2FA on it
