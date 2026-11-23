@@ -14,6 +14,7 @@ namespace Da\User\Form;
 use Da\User\Helper\SecurityHelper;
 use Da\User\Model\User;
 use Da\User\Query\UserQuery;
+use Da\User\Service\TwoFactorAttemptLimiter;
 use Da\User\Traits\ContainerAwareTrait;
 use Da\User\Traits\ModuleAwareTrait;
 use Da\User\Validator\TwoFactorCodeValidator;
@@ -137,10 +138,22 @@ class LoginForm extends Model
                         $type = $this->user->auth_tf_type;
                         $class = ArrayHelper::getValue($validators, $type.'.class');
                         $codeDurationTime = ArrayHelper::getValue($validators, $type.'.codeDurationTime', 300);
+                        /** @var TwoFactorAttemptLimiter $limiter */
+                        $limiter = $this->make(TwoFactorAttemptLimiter::class, [$this->user]);
+                        if (!$limiter->beginAttempt()) {
+                            $this->addError($attribute, Yii::t(
+                                'usuario',
+                                'Too many wrong codes. Please try again in {0} seconds.',
+                                [$limiter->getRemainingLockoutTime()]
+                            ));
+                            return;
+                        }
                         $validator = $this
                         ->make($class, [$this->user, $this->twoFactorAuthenticationCode, $this->module->twoFactorAuthenticationCycles]);
                         $success = $validator->validate();
-                        if (!$success) {
+                        if ($success) {
+                            $limiter->reset();
+                        } else {
                             $this->addError($attribute, $validator->getUnsuccessLoginMessage($codeDurationTime));
                         }
                     }

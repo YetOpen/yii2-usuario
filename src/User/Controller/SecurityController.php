@@ -151,7 +151,11 @@ class SecurityController extends Controller
                 if ($user->auth_tf_enabled) {
                     // A code still pending for this user is kept: the code step reuses it,
                     // so submitting the password again does not send another e-mail / SMS.
-                    Yii::$app->session->set('credentials', ['login' => $form->login, 'pwd' => $form->password]);
+                    Yii::$app->session->set('credentials', [
+                        'login' => $form->login,
+                        'pwd' => $form->password,
+                        'rememberMe' => (bool) $form->rememberMe,
+                    ]);
                     return $this->redirect(['confirm']);
                 }
             }
@@ -196,6 +200,8 @@ class SecurityController extends Controller
         $form = $this->make(LoginForm::class);
         $form->login = $credentials['login'];
         $form->password = $credentials['pwd'];
+        // "Remember me" was chosen at the first step: the code form does not ask again.
+        $form->rememberMe = !empty($credentials['rememberMe']);
         $form->setScenario('2fa');
 
         /**
@@ -222,6 +228,7 @@ class SecurityController extends Controller
 
                 return $this->goBack();
             }
+            $this->trigger(FormEvent::EVENT_FAILED_LOGIN, $event);
         } else {
             $module = Yii::$app->getModule('user');
             $validators = $module->twoFactorAuthenticationValidators;

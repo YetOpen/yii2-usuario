@@ -178,6 +178,105 @@ class TwoFactorCodeStepCest
         $I->dontSeeResponseCodeIs(403);
     }
 
+    public function testRememberMeChosenAtTheFirstStepIsKept(FunctionalTester $I)
+    {
+        $user = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
+
+        $this->submitCredentials($I, $user->email, true);
+        $I->submitForm('#LoginForm', ['LoginForm[twoFactorAuthenticationCode]' => $this->grabLastEmailedCode($I)]);
+
+        $I->assertEquals($user->id, Yii::$app->user->id);
+        $I->seeCookie('_identity');
+    }
+
+    public function testWithoutRememberMeNoIdentityCookieIsSet(FunctionalTester $I)
+    {
+        $user = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
+
+        $this->submitCredentials($I, $user->email);
+        $I->submitForm('#LoginForm', ['LoginForm[twoFactorAuthenticationCode]' => $this->grabLastEmailedCode($I)]);
+
+        $I->assertEquals($user->id, Yii::$app->user->id);
+        $I->dontSeeCookie('_identity');
+    }
+
+    public function testCodeStepLocksAfterTooManyWrongCodes(FunctionalTester $I)
+    {
+        $user = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
+
+        $this->submitCredentials($I, $user->email);
+        $code = $this->grabLastEmailedCode($I);
+        $wrong = $this->wrongCode($code);
+        for ($i = 0; $i < 5; $i++) {
+            $I->submitForm('#LoginForm', ['LoginForm[twoFactorAuthenticationCode]' => $wrong]);
+            $I->dontSee('Too many wrong codes');
+        }
+
+        $I->amGoingTo('enter the right code once the attempts are used up');
+        $I->submitForm('#LoginForm', ['LoginForm[twoFactorAuthenticationCode]' => $code]);
+
+        $I->see('Too many wrong codes');
+        $I->assertTrue(Yii::$app->user->getIsGuest());
+    }
+
+    public function testAjaxValidationCountsAsAnAttempt(FunctionalTester $I)
+    {
+        $user = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
+
+        $this->submitCredentials($I, $user->email);
+        $code = $this->grabLastEmailedCode($I);
+        for ($i = 0; $i < 5; $i++) {
+            $I->sendAjaxPostRequest(Url::to(['/user/security/confirm']), ['LoginForm' => ['twoFactorAuthenticationCode' => $this->wrongCode($code)]]);
+        }
+        $I->sendAjaxPostRequest(Url::to(['/user/security/confirm']), ['LoginForm' => ['twoFactorAuthenticationCode' => $code]]);
+
+        $I->assertStringContainsString('Too many wrong codes', $I->grabPageSource());
+    }
+
+    public function testLockIsKeptOnTheUserNotInTheSession(FunctionalTester $I)
+    {
+        $user = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
+        $user->updateAttributes(['auth_tf_failed_attempts' => 5, 'auth_tf_last_failed_at' => time()]);
+
+        $I->amGoingTo('start over in a brand new session');
+        $this->submitCredentials($I, $user->email);
+        $I->submitForm('#LoginForm', ['LoginForm[twoFactorAuthenticationCode]' => $this->grabLastEmailedCode($I)]);
+
+        $I->see('Too many wrong codes');
+        $I->assertTrue(Yii::$app->user->getIsGuest());
+    }
+
+    public function testLockExpiresAndARightCodeResetsTheCount(FunctionalTester $I)
+    {
+        $user = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
+        $user->updateAttributes(['auth_tf_failed_attempts' => 5, 'auth_tf_last_failed_at' => time() - 301]);
+
+        $this->submitCredentials($I, $user->email);
+        $I->submitForm('#LoginForm', ['LoginForm[twoFactorAuthenticationCode]' => $this->grabLastEmailedCode($I)]);
+
+        $I->assertEquals($user->id, Yii::$app->user->id);
+        $I->seeRecord(User::class, ['id' => $user->id, 'auth_tf_failed_attempts' => 0, 'auth_tf_last_failed_at' => null]);
+    }
+
+    public function testApiVerifyLocksAfterTooManyWrongCodes(FunctionalTester $I)
+    {
+        $user = $this->enableEmailTwoFactor($I->grabFixture('user', 'user'));
+        $code = Yii::$container->get(TwoFactorEmailCodeGeneratorService::class, [$user])->run();
+        $token = base64_encode(Yii::$app->security->encryptByKey(
+            json_encode(['id' => $user->id, 'expire' => time() + 300]),
+            Yii::$app->request->cookieValidationKey
+        ));
+        $url = Url::to(['/user/api/v1/security/verify']);
+
+        for ($i = 0; $i < 5; $i++) {
+            $I->sendAjaxPostRequest($url, ['tfa_token' => $token, 'code' => $this->wrongCode($code)]);
+            $I->seeResponseCodeIs(401);
+        }
+        $I->sendAjaxPostRequest($url, ['tfa_token' => $token, 'code' => $code]);
+
+        $I->seeResponseCodeIs(429);
+    }
+
     private function enableEmailTwoFactor(User $user)
     {
         $user->updateAttributes(['auth_tf_enabled' => true, 'auth_tf_type' => 'email']);
@@ -185,11 +284,14 @@ class TwoFactorCodeStepCest
         return $user;
     }
 
-    private function submitCredentials(FunctionalTester $I, $login)
+    private function submitCredentials(FunctionalTester $I, $login, $rememberMe = false)
     {
         $I->amOnRoute('/user/security/login');
         $I->fillField('#loginform-login', $login);
         $I->fillField('#loginform-password', 'qwerty');
+        if ($rememberMe) {
+            $I->checkOption('#loginform-rememberme');
+        }
         $I->click('Sign in');
     }
 
@@ -199,5 +301,10 @@ class TwoFactorCodeStepCest
         $I->assertSame(1, preg_match('/<b>(\d{6})<\/b>/', $body, $matches), 'No code found in the e-mail');
 
         return $matches[1];
+    }
+
+    private function wrongCode($code)
+    {
+        return sprintf('%06d', ((int) $code + 1) % 1000000);
     }
 }
