@@ -2,7 +2,7 @@
 
 ## dev
 
-- New: `Profile::$phone`, the user's mobile number in international format (`profile.phone`, indexed, migration `m000000_000012`): set by an administrator only (`Profile::SCENARIO_ADMIN`, the admin profile form), never mass-assignable from the user's own settings, since an application may identify a user by it (mp1509)
+- New: `Profile::$phone`, the user's mobile number in international format (`profile.phone`, indexed, migration `m000000_000013`): set by an administrator only (`Profile::SCENARIO_ADMIN`, the admin profile form), never mass-assignable from the user's own settings, since an application may identify a user by it (mp1509)
 
 ## 1.7.0 Nov 23rd, 2026
 

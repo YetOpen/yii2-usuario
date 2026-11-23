@@ -17,7 +17,7 @@ use yii\db\Migration;
  * Adds `{{%profile}}.phone`: the user's mobile number, in international format, set by an
  * administrator. Indexed: applications look a user up by it.
  */
-class m000000_000012_add_phone_column_to_profile_table extends Migration
+class m000000_000013_add_phone_column_to_profile_table extends Migration
 {
     /**
      * {@inheritdoc}
