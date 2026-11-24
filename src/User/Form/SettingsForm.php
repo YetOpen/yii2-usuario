@@ -20,12 +20,20 @@ use Yii;
 use yii\base\InvalidConfigException;
 use yii\base\InvalidParamException;
 use yii\base\Model;
+use yii\base\ModelEvent;
 use yii\helpers\ArrayHelper;
 
 class SettingsForm extends Model
 {
     use ModuleAwareTrait;
     use ContainerAwareTrait;
+
+    /**
+     * Triggered (once per form) to ask whether the user may set a new password from this form.
+     * The handler receives a {@see ModelEvent} whose `sender` is this form, so it can read the user through
+     * {@see getUser()}, and sets `isValid` to `false` to refuse the change. Without handlers the change is allowed.
+     */
+    const EVENT_PASSWORD_CHANGE_ALLOWED = 'passwordChangeAllowed';
 
     /**
      * @var string
@@ -50,6 +58,11 @@ class SettingsForm extends Model
 
     /** @var User */
     protected $user;
+
+    /**
+     * @var bool|null memoised answer of {@see isPasswordChangeAllowed()}
+     */
+    private $passwordChangeAllowed;
 
     /**
      * SettingsForm constructor.
@@ -95,6 +108,17 @@ class SettingsForm extends Model
                 'targetClass' => $this->getClassMap()->get(User::class),
             ],
             'newPasswordLength' => ['new_password', 'string', 'max' => 72, 'min' => 6],
+            'newPasswordAllowed' => [
+                'new_password',
+                function ($attribute) {
+                    if (!$this->isPasswordChangeAllowed()) {
+                        $this->addError(
+                            $attribute,
+                            Yii::t('usuario', 'Your password is managed by your organisation\'s directory and cannot be changed here.')
+                        );
+                    }
+                },
+            ],
             'currentPasswordRequired' => ['current_password', 'required'],
             'currentPasswordValidate' => [
                 'current_password',
@@ -130,6 +154,24 @@ class SettingsForm extends Model
         }
 
         return $this->user;
+    }
+
+    /**
+     * Whether the user may set a new password from this form, as answered by the handlers of
+     * {@see EVENT_PASSWORD_CHANGE_ALLOWED}. Allowed when nobody objects.
+     *
+     * @return bool
+     */
+    public function isPasswordChangeAllowed()
+    {
+        if ($this->passwordChangeAllowed === null) {
+            /** @var ModelEvent $event */
+            $event = $this->make(ModelEvent::class);
+            $this->trigger(self::EVENT_PASSWORD_CHANGE_ALLOWED, $event);
+            $this->passwordChangeAllowed = (bool)$event->isValid;
+        }
+
+        return $this->passwordChangeAllowed;
     }
 
     /**

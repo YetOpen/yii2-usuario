@@ -57,7 +57,18 @@ $module = Yii::$app->getModule('user');
 
                 <?= $form->field($model, 'username') ?>
 
-                <?= $form->field($model, 'new_password')->passwordInput() ?>
+                <?php if ($model->isPasswordChangeAllowed()): ?>
+                    <?= $form->field($model, 'new_password')->passwordInput() ?>
+                <?php else: ?>
+                    <div class="form-group field-<?= Html::getInputId($model, 'new_password') ?>">
+                        <?= Html::activeLabel($model, 'new_password', ['class' => 'col-lg-3 control-label']) ?>
+                        <div class="col-lg-9">
+                            <p class="form-control-static">
+                                <?= Html::encode(Yii::t('usuario', 'Your password is managed by your organisation\'s directory and cannot be changed here.')) ?>
+                            </p>
+                        </div>
+                    </div>
+                <?php endif ?>
 
                 <hr/>
 

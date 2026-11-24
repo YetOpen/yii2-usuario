@@ -2,6 +2,7 @@
 
 ## dev
 
+- New: `SettingsForm::EVENT_PASSWORD_CHANGE_ALLOWED` and `SettingsForm::isPasswordChangeAllowed()` let an application or extension forbid setting a new password from Account (e.g. for users whose password belongs to a directory); the `new_password` field is then hidden and a submitted value is rejected by validation. No change without handlers
 - New: REST endpoint to disable two factor authentication for the logged-in user (`api/v1/SettingsController::two-factor-disable`), gated behind a re-check of the account password and clearing the channel and outstanding recovery codes via `TwoFactorDisableService`; sends the 2FA-disabled notification email (mp1509)
 - Fix: API password reset now consumes the recovery token via `Token::deleteAll()` instead of the AR instance `delete()`, so single-use cleanup is not vetoed by a host app's `EVENT_BEFORE_DELETE` permission guard on the unauthenticated reset request (mp1509)
 - Enh: API password reset returns password validation errors as `422 [{field, message}]` (distinct from the opaque `400` for a bad/expired token), so clients can show why a password was rejected (mp1509)

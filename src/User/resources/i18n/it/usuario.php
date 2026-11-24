@@ -315,6 +315,7 @@ return [
     'Your consent is required to work with this site' => 'È richiesto il tuo consenso per navigare sul sito',
     'Your email address has been changed' => 'Il tuo indirizzo email è stato cambiato',
     'Your password has expired, you must change it now' => 'La tua password è scaduta, devi cambiarla',
+    'Your password is managed by your organisation\'s directory and cannot be changed here.' => 'La tua password è gestita dalla directory della tua organizzazione e non può essere modificata qui.',
     'Your personal information has been removed' => 'I tuoi dati personali sono stati rimossi',
     'Your profile has been updated' => 'Il tuo profilo è stato aggiornato',
     'Your role requires 2FA, you won\'t be able to use the application until you enable it' => 'Il tuo ruolo richiede l\'autenticazione a due fattori, non potrai usare l\'applicazione finché non l\'avrai abilitata',

@@ -84,5 +84,24 @@ $application->run();
 
 ```
 
+## Forbidding a password change from Account
+
+`SettingsForm::EVENT_PASSWORD_CHANGE_ALLOWED` is raised once per form, the first time the account view or the
+`new_password` validation asks `SettingsForm::isPasswordChangeAllowed()`. The handler receives a `yii\base\ModelEvent`
+whose `sender` is the form; setting `isValid` to `false` hides the `new_password` field and makes validation reject any
+submitted value. Without handlers the change is allowed.
+
+```php
+use Da\User\Form\SettingsForm;
+use yii\base\Event;
+use yii\base\ModelEvent;
+
+Event::on(SettingsForm::class, SettingsForm::EVENT_PASSWORD_CHANGE_ALLOWED, function (ModelEvent $event) {
+    /** @var SettingsForm $form */
+    $form = $event->sender;
+    $event->isValid = $form->getUser()->login_source === 'local';
+});
+```
+
 © [2amigos](http://www.2amigos.us/) 2013-2019
 
